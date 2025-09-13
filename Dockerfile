@@ -21,7 +21,7 @@ COPY . .
 # ENV GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/sa.json
 
 # Expose port
-ENV PORT=3000
+ENV PORT=4444
 
 # Command to run the app
 CMD ["node", "index.js"]
