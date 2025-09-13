@@ -24,4 +24,4 @@ COPY . .
 ENV PORT=4444
 
 # Command to run the app
-CMD ["node", "index.js"]
+CMD ["node", "server.js"]
