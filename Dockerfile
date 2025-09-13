@@ -15,10 +15,10 @@ COPY . .
 
 # Copy Google service account key into container
 # Make sure you have your JSON file at ./credentials/sa.json relative to your project
-COPY ./sa.json /app/credentials/sa.json
+# COPY ./sa.json /app/credentials/sa.json
 
 # Set environment variable for Google credentials
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/sa.json
+# ENV GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/sa.json
 
 # Expose port
 ENV PORT=3000
