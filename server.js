@@ -1,170 +1,252 @@
 const express = require('express');
 const multer = require('multer');
-const { DocumentProcessorServiceClient } = require('@google-cloud/documentai').v1;
-const path = require('path');
 const cors = require('cors');
-
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config(); // Load environment variables
-
 const app = express();
 app.use(cors());
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 4000;
 
 // Middleware for JSON and URL-encoded bodies with size limits
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Configure multer to store files in memory (for binary processing)
+// Configure multer with file size limit and image filter
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'application/pdf'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error('الرجاء تحميل ملف صورة (PNG أو JPEG) أو PDF فقط.'));
+    }
+    cb(null, true);
+  }
+});
 
-// Google Document AI Configuration
-const projectId = process.env.GCP_PROJECT_ID || 'eastern-amp-471710-u4';
-const location = process.env.GCP_LOCATION || 'us';
-const processorId = process.env.GCP_PROCESSOR_ID || 'abc7c6209dbadfc1';
+// Gemini API Configuration
+const API_KEY = process.env.GEMINI_API_KEY || "AIzaSyCvnu9jFkpki73oMquseZ7Rp6hcfgTNzys";
+if (!API_KEY) {
+  console.error('[ERROR] GEMINI_API_KEY غير موجود في ملف .env');
+  process.exit(1);
+}
+const genAI = new GoogleGenerativeAI(API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
 
-const client = new DocumentProcessorServiceClient();
-
+// Multer error handling middleware
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    console.error('[ERROR] فشل تحميل الملف: حجم الملف يتجاوز 50 ميجابايت');
+    return res.status(400).json({
+      error: 'حجم الملف كبير جدًا. الحد الأقصى المسموح به هو 50 ميجابايت. الرجاء ضغط الصورة.',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
+  } else if (err.message.includes('الرجاء تحميل ملف صورة')) {
+    console.error('[ERROR] نوع الملف غير مدعوم:', err.message);
+    return res.status(400).json({
+      error: err.message,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
+  }
+  next(err);
+});
 /**
- * @api {post} /process-document معالجة مستند PDF
- * @apiDescription تحميل ملف PDF ومعالجته عبر Document AI لاستخراج النص والكيانات
- * @apiParam {File} document الملف المراد معالجته (يجب أن يكون PDF)
- * @apiSuccess {String} text النص الكامل المستخرج من المستند
- * @apiSuccess {Object} entities كائن يحتوي على الكيانات المستخرجة (مفتاح=النوع، قيمة=النص)
+ * @api {post} /api/gemini معالجة الصورة باستخدام Gemini مباشرة
+ * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص وتحليله باستخدام Gemini API
+ * @apiParam {File} image الصورة المراد معالجتها (PNG أو JPEG، بحد أقصى 50 ميجابايت)
+ * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
+ */
+app.post('/api/gemini', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
+    }
+    console.log(`[INFO] معالجة الصورة: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`);
+
+    // Convert image buffer to base64 for Gemini
+    const imageBase64 = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype;
+
+    // Prepare prompt for Gemini to extract text and return as flat JSON
+    const prompt = `
+      Extract key information from the provided image and return it as a flat JSON object (no nested fields, all values as strings). Ensure the output is valid JSON with meaningful field names based on the content. For example, if the text contains a name, use "name" as the key, and the value as a string. Do not include any nested objects or arrays. If a field is not present, do not include it in the output. Wrap the JSON output in a code block (e.g., \`\`\`json\n{...}\n\`\`\`).
+
+      Return the result as a JSON object, make fields for:
+      - full_name
+      - date_of_birth (in ISO format, e.g., "YYYY-MM-DD")
+      - age
+      - nationality
+      - birth_place
+      - office_name
+      - company_name
+      - passport_issue_date
+      - passport_expiration
+      - gender
+      - religion
+      - skills (as a string, e.g., JSON stringified if multiple skills)
+    `;
+
+    // Send image and prompt to Gemini
+    console.log('[INFO] إرسال الصورة إلى Gemini...');
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: imageBase64,
+          mimeType: mimeType
+        }
+      },
+      { text: prompt }
+    ]);
+
+    const response = await result.response;
+    let rawText = response.text();
+    console.log('[INFO] استجابة Gemini الخام:', rawText);
+
+    // Clean the response: Remove ```json and ``` markers, trim whitespace
+    rawText = rawText.replace(/```json\n?|\n?```/g, '').trim();
+
+    // Ensure the response is valid JSON
+    let jsonResponse;
+    try {
+      jsonResponse = JSON.parse(rawText);
+      // Validate that the response is a flat object
+      if (typeof jsonResponse !== 'object' || Array.isArray(jsonResponse) || jsonResponse === null) {
+        throw new Error('Response is not a valid flat JSON object');
+      }
+      // Ensure all values are strings and no nested objects
+      jsonResponse = Object.entries(jsonResponse).reduce((acc, [key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          return { ...acc, [key]: JSON.stringify(value) };
+        }
+        return { ...acc, [key]: String(value) };
+      }, {});
+    } catch (parseError) {
+      console.error('[ERROR] فشل تحليل استجابة Gemini:', parseError.message, 'Raw response:', rawText);
+      return res.status(500).json({
+        error: 'فشل في تحليل استجابة Gemini كـ JSON صالح.',
+        details: process.env.NODE_ENV === 'development' ? parseError.message : undefined,
+        rawResponse: process.env.NODE_ENV === 'development' ? rawText : undefined
+      });
+    }
+
+    console.log('[INFO] استجابة Gemini المحللة:', jsonResponse);
+    res.status(200).json({ jsonResponse });
+
+  } catch (error) {
+    console.error('[ERROR] خطأ أثناء معالجة الصورة:', error.message, error.stack);
+    res.status(500).json({
+      error: 'حدث خطأ داخلي أثناء معالجة الصورة.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+/**
+ * @api {post} /process-document معالجة صورة
+ * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص باستخدام Google Cloud Vision API
+ * @apiParam {File} document الصورة المراد معالجتها (PNG أو JPEG، بحد أقصى 50 ميجابايت)
+ * @apiSuccess {String} text النص المستخرج من الصورة
  */
 app.post('/process-document', upload.single('document'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
-  }
-
-  if (req.file.mimetype !== 'application/pdf') {
-    return res.status(400).json({ error: 'الرجاء تحميل ملف PDF فقط.' });
-  }
-
   try {
-    const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-    const encodedDocument = req.file.buffer.toString('base64');
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
+    }
+    console.log(`[INFO] معالجة الصورة: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`);
+    
+    // Note: Google Cloud Vision code is removed from this route since you requested no vision
+    // If you need it back, you can re-add the visionClient.textDetection call here
 
-    const request = {
-      name,
-      rawDocument: {
-        content: encodedDocument,
-        mimeType: req.file.mimetype,
-      },
-    };
+    res.status(200).json({ message: 'هذا المسار مخصص لـ Google Cloud Vision، استخدم /api/gemini لمعالجة الصور مباشرة.' });
 
-    const [result] = await client.processDocument(request);
-    const { document } = result;
+  } catch (error) {
+    console.error('[ERROR] أثناء معالجة الصورة:', error.message, error.stack);
+    res.status(500).json({
+      error: 'حدث خطأ داخلي أثناء معالجة الصورة.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
 
-    const extractedData = {
-      text: document.text || '',
-      entities: {},
-    };
-
-    if (document.entities && Array.isArray(document.entities)) {
-      for (const entity of document.entities) {
-        const key = entity.type;
-        const value = entity.mentionText || '';
-        if (extractedData.entities[key]) {
-          // Handle duplicate types by making array (optional enhancement)
-          if (!Array.isArray(extractedData.entities[key])) {
-            extractedData.entities[key] = [extractedData.entities[key]];
-          }
-          extractedData.entities[key].push(value);
-        } else {
-          extractedData.entities[key] = value;
-        }
+/**
+ * @api {post} /prompt معالجة النص باستخدام Gemini API
+ * @apiDescription إرسال نص مباشر إلى Gemini API لتنظيمه ككائن JSON مسطح
+ * @apiParam {String} text النص المراد معالجته
+ * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
+ */
+app.post('/prompt', async (req, res) => {
+  const { text } = req.body;
+  console.log("tex", text);
+  if (!text) {
+    return res.status(400).json({ error: 'الرجاء توفير نص للمعالجة.' });
+  }
+  console.log('[INFO] إرسال النص إلى Gemini...');
+  try {
+    const prompt = `
+      Extract key information from the following text and return it as a flat JSON object (no nested fields, all values as strings). Ensure the output is valid JSON with meaningful field names based on the content. For example, if the text contains a name, use "name" as the key, and the value as a string. Do not include any nested objects or arrays. If a field is not present, do not include it in the output.
+      Text: "${text}"
+     
+      Return the result as a JSON object, make fields for:
+      - full name
+      - date of birth (in ISO format)
+      - age
+      - nationality
+      - birth place
+      - office name
+      - company name
+      - passport issue date
+      - passport expiration
+      - gender
+      - religion
+      - skills (as a string, e.g., JSON stringified if multiple skills)
+    `;
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const rawText = response.text();
+    // Ensure the response is valid JSON
+    let jsonResponse;
+    try {
+      jsonResponse = JSON.parse(rawText);
+      // Validate that the response is a flat object
+      if (typeof jsonResponse !== 'object' || Array.isArray(jsonResponse) || jsonResponse === null) {
+        throw new Error('Response is not a valid flat JSON object');
       }
+      // Ensure all values are strings and no nested objects
+      jsonResponse = Object.entries(jsonResponse).reduce((acc, [key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          return { ...acc, [key]: JSON.stringify(value) };
+        }
+        return { ...acc, [key]: String(value) };
+      }, {});
+    } catch (parseError) {
+      console.error('[ERROR] فشل تحليل استجابة Gemini:', parseError.message, rawText);
+      return res.status(500).json({
+        error: 'فشل في تحليل استجابة Gemini كـ JSON صالح.',
+        details: process.env.NODE_ENV === 'development' ? parseError.message : undefined,
+      });
     }
-
-    res.status(200).json(extractedData);
-
+    console.log('[INFO] استجابة Gemini المحللة:', jsonResponse);
+    res.status(200).json({ jsonResponse });
   } catch (error) {
-    console.error('[ERROR] أثناء معالجة المستند:', error.message);
+    console.error('[ERROR] خطأ أثناء معالجة النص:', error.message, error.stack);
     res.status(500).json({
-      error: 'حدث خطأ داخلي أثناء معالجة المستند.',
+      error: 'حدث خطأ داخلي أثناء معالجة النص.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 });
 
-/**
- * @api {post} /processor-control التحكم في حالة المعالج
- * @apiDescription تفعيل أو تعطيل معالج Document AI
- * @apiParam {String} action "enable" أو "disable"
- * @apiSuccess {String} message رسالة نجاح
- * @apiSuccess {Object} response استجابة العملية من Google Cloud
- */
-app.post('/processor-control', async (req, res) => {
-  const { action } = req.body;
-
-  if (!action || !['enable', 'disable'].includes(action)) {
-    return res.status(400).json({
-      error: 'يجب تحديد إجراء صالح: "enable" أو "disable".',
-    });
-  }
-
-  try {
-    const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-
-    let operation;
-    if (action === 'disable') {
-      [operation] = await client.disableProcessor({ name });
-      console.log(`[INFO] جارٍ تعطيل المعالج: ${processorId}`);
-    } else {
-      [operation] = await client.enableProcessor({ name });
-      console.log(`[INFO] جارٍ تفعيل المعالج: ${processorId}`);
-    }
-
-    const [response] = await operation.promise();
-    console.log(`[SUCCESS] تم ${action} المعالج بنجاح.`);
-
-    res.status(200).json({
-      message: `تم ${action === 'enable' ? 'تفعيل' : 'تعطيل'} المعالج بنجاح.`,
-      response,
-    });
-
-  } catch (error) {
-    console.error(`[ERROR] أثناء ${action === 'enable' ? 'تفعيل' : 'تعطيل'} المعالج:`, error.message);
-    res.status(500).json({
-      error: `حدث خطأ داخلي أثناء ${action === 'enable' ? 'تفعيل' : 'تعطيل'} المعالج.`,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    });
-  }
-});
-
-/**
- * 🆕 NEW ENDPOINT: Get current processor status
- * @api {get} /processor-control/status التحقق من حالة المعالج
- * @apiDescription يُعيد الحالة الحالية للمعالج (ENABLED/DISABLED) ووقت آخر تحديث
- * @apiSuccess {String} status "ENABLED" أو "DISABLED"
- * @apiSuccess {String} updatedAt وقت آخر تحديث للحالة (ISO 8601)
- */
-app.get('/processor-control/status', async (req, res) => {
-  try {
-    const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
-    const [processor] = await client.getProcessor({ name });
-
-    const status = processor.state.toString(); // e.g., "ENABLED", "DISABLED"
-    const updatedAt = processor.updateTime
-      ? new Date(processor.updateTime.seconds * 1000).toISOString()
-      : new Date().toISOString();
-
-    res.json({
-      status,
-      updatedAt,
-    });
-
-  } catch (error) {
-    console.error('[ERROR] أثناء التحقق من حالة المعالج:', error.message);
-    res.status(500).json({
-      error: 'فشل التحقق من حالة المعالج.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    });
-  }
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Gemini API يعمل',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Start server
 app.listen(port, () => {
-  console.log(`✅ خادم Document AI يعمل على http://localhost:${port}`);
+  console.log(`✅ خادم Gemini يعمل على http://localhost:${port}`);
+  console.log(`📋 فحص الحالة: http://localhost:${port}/health`);
 });

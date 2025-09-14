@@ -1,1 +1,12 @@
 /.env
+
+node_modules
+output
+
+ara.traineddata
+eng.traineddata
+sa.json
+testdeepseek.js
+
+
+/.json
