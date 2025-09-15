@@ -32,7 +32,7 @@ if (!API_KEY) {
   process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // Multer error handling middleware
 app.use((err, req, res, next) => {
@@ -73,18 +73,27 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
       Extract key information from the provided image and return it as a flat JSON object (no nested fields, all values as strings). Ensure the output is valid JSON with meaningful field names based on the content. For example, if the text contains a name, use "name" as the key, and the value as a string. Do not include any nested objects or arrays. If a field is not present, do not include it in the output. Wrap the JSON output in a code block (e.g., \`\`\`json\n{...}\n\`\`\`).
 
       Return the result as a JSON object, make fields for:
-      - full_name
-      - date_of_birth (in ISO format, e.g., "YYYY-MM-DD")
-      - age
-      - nationality
-      - birth_place
-      - office_name
-      - company_name
-      - passport_issue_date
-      - passport_expiration
-      - gender
-      - religion
-      - skills (as a string, e.g., JSON stringified if multiple skills)
+        - full_name
+        - date_of_birth (in ISO format, e.g., "YYYY-MM-DD")
+        - age
+        - nationality
+        - birth_place
+        - office_name
+        - company_name
+        - passport_issue_date
+        - passport_expiration
+        - gender
+        - religion
+        - skills (as a string, e.g., JSON stringified if multiple skills)
+        - job_title
+    passport_number
+    salary: 
+    languages_spoken: 
+    living_town
+    children_count
+    weight
+    height
+    marital_status
     `;
 
     // Send image and prompt to Gemini
