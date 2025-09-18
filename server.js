@@ -55,6 +55,7 @@ app.use((err, req, res, next) => {
  * @api {post} /api/gemini معالجة الصورة باستخدام Gemini مباشرة
  * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص وتحليله باستخدام Gemini API
  * @apiParam {File} image الصورة المراد معالجتها (PNG أو JPEG، بحد أقصى 50 ميجابايت)
+ * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-2.5-flash)
  * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
  */
 app.post('/api/gemini', upload.single('image'), async (req, res) => {
@@ -62,7 +63,13 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
     }
+    
+    // Get model name from request body or use default
+    const modelName = req.body.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const dynamicModel = genAI.getGenerativeModel({ model: modelName });
+    
     console.log(`[INFO] معالجة الصورة: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`);
+    console.log(`[INFO] استخدام نموذج: ${modelName}`);
 
     // Convert image buffer to base64 for Gemini
     const imageBase64 = req.file.buffer.toString('base64');
@@ -110,7 +117,7 @@ all keys are necessery if not found return it null
 
 - Experience: "Novice | مدربة بدون خبرة", "Well-experienced  | خبرة جيدة"
 - Education: "Illiterate - غير متعلم", "Primary school - ابتدائي", "High school - ثانوي"
-- Marital Status: "Single - عازبة", "Married - متزوجة"
+- Marital Status: "Single - عازبة", "Married - متزوجة"  , "Separated -  منفصلة"
 - Religion: "Non-Muslim - غير مسلم", "Islam - الإسلام" , "Christianity - المسيحية"
 - Language Levels: "Beginner - مبتدأ", "Intermediate - جيد", "Advanced - جيد جداً", "Non - لا تجيد"
 - Skills (Laundry, Ironing, Cleaning, Cooking, Sewing, BabySitter): same as Language Levels
@@ -123,7 +130,7 @@ Philippines - الفلبين)
 
     // Send image and prompt to Gemini
     console.log('[INFO] إرسال الصورة إلى Gemini...');
-    const result = await model.generateContent([
+    const result = await dynamicModel.generateContent([
       {
         inlineData: {
           data: imageBase64,
@@ -206,14 +213,21 @@ app.post('/process-document', upload.single('document'), async (req, res) => {
  * @api {post} /prompt معالجة النص باستخدام Gemini API
  * @apiDescription إرسال نص مباشر إلى Gemini API لتنظيمه ككائن JSON مسطح
  * @apiParam {String} text النص المراد معالجته
+ * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-2.5-flash)
  * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
  */
 app.post('/prompt', async (req, res) => {
-  const { text } = req.body;
+  const { text, model: modelName } = req.body;
   console.log("tex", text);
   if (!text) {
     return res.status(400).json({ error: 'الرجاء توفير نص للمعالجة.' });
   }
+  
+  // Get model name from request body or use default
+  const selectedModel = modelName || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const dynamicModel = genAI.getGenerativeModel({ model: selectedModel });
+  
+  console.log(`[INFO] استخدام نموذج: ${selectedModel}`);
   console.log('[INFO] إرسال النص إلى Gemini...');
   try {
     const prompt = `
@@ -234,7 +248,7 @@ app.post('/prompt', async (req, res) => {
       - religion
       - skills (as a string, e.g., JSON stringified if multiple skills)
     `;
-    const result = await model.generateContent(prompt);
+    const result = await dynamicModel.generateContent(prompt);
     const response = await result.response;
     const rawText = response.text();
     // Ensure the response is valid JSON
