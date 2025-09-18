@@ -70,30 +70,50 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 
     // Prepare prompt for Gemini to extract text and return as flat JSON
     const prompt = `
-      Extract key information from the provided image and return it as a flat JSON object (no nested fields, all values as strings). Ensure the output is valid JSON with meaningful field names based on the content. For example, if the text contains a name, use "name" as the key, and the value as a string. Do not include any nested objects or arrays. If a field is not present, do not include it in the output. Wrap the JSON output in a code block (e.g., \`\`\`json\n{...}\n\`\`\`).
+    Extract key information and return it as a **flat JSON object** (no nested fields, all values as strings).  
 
-      Return the result as a JSON object, make fields for:
-        - full_name
-        - date_of_birth (in ISO format, e.g., "YYYY-MM-DD")
-        - age
-        - nationality
-        - birth_place
-        - office_name
-        - company_name
-        - passport_issue_date
-        - passport_expiration
-        - gender
-        - religion
-        - skills (as a string, e.g., JSON stringified if multiple skills)
-        - job_title
-    passport_number
-    salary: 
-    languages_spoken: 
-    living_town
-    children_count
-    weight
-    height
-    marital_status
+⚠️ Rules:
+- Only use values from the allowed list below when filling fields like experience, education, marital_status, religion, language levels, skills.
+- Do not translate or normalize values — keep them **exactly as in the reference list**.
+- If a field is missing, simply do not include it.
+- Dates must be in **ISO format** (YYYY-MM-DD).
+- \`skills\` should be a string combining the household abilities (e.g., "Laundry: Intermediate - جيد, Ironing: Beginner - مبتدأ").
+- \`languages_spoken\` should also be a string combining both Arabic and English levels (e.g., "Arabic: Beginner - مبتدأ, English: Intermediate - جيد").
+- Always return the output in valid JSON format.
+
+📝 Required keys:
+- full_name  
+- date_of_birth  
+- age  
+- nationality  
+- birth_place  
+- office_name  
+- company_name  
+- passport_issue_date  
+- passport_expiration  
+- gender  
+- religion  
+- skills  
+- job_title  
+- passport_number  
+- salary  
+- languages_spoken  
+- living_town  
+- children_count  
+- weight  
+- height  
+- marital_status  
+
+🎯 Allowed Values:
+- Experience: "Novice | مدربة بدون خبرة", "Well-experienced  | خبرة جيدة"
+- Education: "Illiterate - غير متعلم", "Primary school - ابتدائي", "High school - ثانوي"
+- Marital Status: "Single - عازبة", "Married - متزوجة"
+- Religion: "Non-Muslim - غير مسلم", "Islam - الإسلام" , "Christianity - المسيحية"
+- Language Levels: "Beginner - مبتدأ", "Intermediate - جيد", "Advanced - جيد جداً", "Non - لا تجيد"
+- Skills (Laundry, Ironing, Cleaning, Cooking, Sewing, BabySitter): same as Language Levels
+- Salary: "ريال900"
+- Nationality: "Uganda - أوغندا"
+
     `;
 
     // Send image and prompt to Gemini
