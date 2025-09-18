@@ -77,10 +77,10 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 - Do not translate or normalize values — keep them **exactly as in the reference list**.
 - If a field is missing, simply do not include it.
 - Dates must be in **ISO format** (YYYY-MM-DD).
-- \`skills\` should be a string combining the household abilities (e.g., "Laundry: Intermediate - جيد, Ironing: Beginner - مبتدأ").
-- \`languages_spoken\` should also be a string combining both Arabic and English levels (e.g., "Arabic: Beginner - مبتدأ, English: Intermediate - جيد").
+- \`skills\` should be an object combining the household abilities (e.g., "Laundry: Intermediate - جيد, Ironing: Beginner - مبتدأ").
+- \`languages_spoken\` should also be an object combining both Arabic and English levels (e.g., "Arabic: Beginner - مبتدأ, English: Intermediate - جيد").
 - Always return the output in valid JSON format.
-
+- if no value found return null
 📝 Required keys:
 - full_name  
 - date_of_birth  
@@ -111,9 +111,11 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 - Religion: "Non-Muslim - غير مسلم", "Islam - الإسلام" , "Christianity - المسيحية"
 - Language Levels: "Beginner - مبتدأ", "Intermediate - جيد", "Advanced - جيد جداً", "Non - لا تجيد"
 - Skills (Laundry, Ironing, Cleaning, Cooking, Sewing, BabySitter): same as Language Levels
-- Salary: "ريال900"
-- Nationality: "Uganda - أوغندا"
-
+- Nationality is one of this (Uganda - أوغندا
+Ethiopia - إثيوبيا
+Kenya - كينيا
+Bengladesh - بنغلادش
+Philippines - الفلبين)
     `;
 
     // Send image and prompt to Gemini
