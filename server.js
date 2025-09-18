@@ -104,7 +104,10 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 - height  
 - marital_status  
 
+
+all keys are necessery if not found return it null
 🎯 Allowed Values:
+
 - Experience: "Novice | مدربة بدون خبرة", "Well-experienced  | خبرة جيدة"
 - Education: "Illiterate - غير متعلم", "Primary school - ابتدائي", "High school - ثانوي"
 - Marital Status: "Single - عازبة", "Married - متزوجة"
