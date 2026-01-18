@@ -51,6 +51,7 @@ app.use((err, req, res, next) => {
   }
   next(err);
 });
+
 /**
  * @api {post} /api/gemini معالجة الصورة باستخدام Gemini مباشرة
  * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص وتحليله باستخدام Gemini API
@@ -77,56 +78,47 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 
     // Prepare prompt for Gemini to extract text and return as flat JSON
     const prompt = `
-    Extract key information and return it as a **flat JSON object** (no nested fields, all values as strings).  
+    Extract key information from this document/image and return it as a **flat JSON object** (no nested fields, all values as strings).  
 
 ⚠️ Rules:
 - Only use values from the allowed list below when filling fields like experience, education, marital_status, religion, language levels, skills.
 - Do not translate or normalize values — keep them **exactly as in the reference list**.
 - If a field is missing, return null for that field.
 - Dates must be in **ISO format** (YYYY-MM-DD).
-- \`skills\` should be a JSON stringified object with keys: washing, cooking, cleaning, ironing, sewing, childcare, elderlycare, laundry (e.g., {"WASHING": "Intermediate - جيد", "COOKING": "Beginner - مبتدأ"}).
-- \`languages_spoken\` should be a JSON stringified object with keys: Arabic, English (e.g., {"Arabic": "Beginner - مبتدأ", "English": "Intermediate - جيد"}).
 - Always return the output in valid JSON format.
 - All keys listed below are required - if a value is not found, return null for that key.
 
 📝 Required keys (all must be present, use null if not found):
-- full_name (or name, Name)
-- date_of_birth (or birthDate, BirthDate, age)
-- age
-- nationality (or Nationality)
-- birth_place
-- office_name (or officeName, OfficeName)
-- company_name (or companyName, CompanyName)
-- passport_issue_date (or passportStart, passportStartDate, PassportStartDate)
-- passport_expiration (or passportEnd, passportEndDate, PassportEndDate)
-- passport_number (or passport, PassportNumber)
-- gender
-- religion (or Religion)
-- marital_status (or maritalStatus, MaritalStatus)
-- job_title (or jobTitle, JobTitle, profession, Profession, job, Job)
-- salary (or Salary)
-- weight (or Weight)
-- height (or Height)
-- children_count (or children, Children)
-- living_town
-- skills (as JSON stringified object)
-- languages_spoken (as JSON stringified object)
-- educationLevel (or education_level, EducationLevel, education, Education)
-- arabicLevel (or arabic_level, ArabicLevel, ArabicLanguageLeveL)
-- englishLevel (or english_level, EnglishLevel, EnglishLanguageLevel)
-- experienceField (or experience_field, ExperienceField, experience, Experience)
-- experienceYears (or experience_years, ExperienceYears, years_of_experience)
-- cookingLevel (or cooking_level, CookingLevel)
-- washingLevel (or washing_level, WashingLevel)
-- ironingLevel (or ironing_level, IroningLevel)
-- cleaningLevel (or cleaning_level, CleaningLevel)
-- sewingLevel (or sewing_level, SewingLevel)
-- childcareLevel (or childcare_level, ChildcareLevel, babysitter, Babysitter, babysitting, Babysitting)
-- elderlycareLevel (or elderlycare_level, ElderlycareLevel, elderly_care, ElderlyCare)
-- laundryLevel (or laundry_level, LaundryLevel)
-- BabySitterLevel (or baby_sitter_level)
-- contract_duration (or Contract_duration, ContractDuration, contractDuration)
-- mobile (or phone, Mobile, Phone)
+- Name (or full_name, name)
+- dateofbirth (or date_of_birth, birthDate, BirthDate) - ISO format YYYY-MM-DD
+- age (as integer string, e.g., "25")
+- Nationalitycopy (or nationality, Nationality) - string value
+- Religion (or religion)
+- Passportnumber (or passport_number, passport, PassportNumber)
+- PassportStart (or passport_issue_date, passportStart, passportStartDate, PassportStartDate) - ISO format YYYY-MM-DD
+- PassportEnd (or passport_expiration, passportEnd, passportEndDate, PassportEndDate) - ISO format YYYY-MM-DD
+- maritalstatus (or marital_status, maritalStatus, MaritalStatus)
+- job (or job_title, jobTitle, JobTitle, profession, Profession)
+- Salary (or salary)
+- weight (as integer string, e.g., "60")
+- height (as integer string, e.g., "165")
+- children (or children_count, childrenCount) - as integer string
+- officeName (or office_name, officeName, OfficeName)
+- Education (or educationLevel, education_level, EducationLevel, education)
+- EnglishLanguageLevel (or englishLevel, english_level, EnglishLevel, EnglishLanguageLevel)
+- ArabicLanguageLeveL (or arabicLevel, arabic_level, ArabicLevel, ArabicLanguageLeveL)
+- Experience (or experienceField, experience_field, ExperienceField, experience)
+- ExperienceYears (or experienceYears, experience_years, ExperienceYears, years_of_experience)
+- CookingLevel (or cookingLevel, cooking_level, CookingLevel)
+- WashingLevel (or washingLevel, washing_level, WashingLevel)
+- IroningLevel (or ironingLevel, ironing_level, IroningLevel)
+- CleaningLevel (or cleaningLevel, cleaning_level, CleaningLevel)
+- SewingLevel (or sewingLevel, sewing_level, SewingLevel)
+- ChildcareLevel (or childcareLevel, childcare_level, ChildcareLevel, babysitter, Babysitter, babysitting, Babysitting)
+- ElderlycareLevel (or elderlycareLevel, elderlycare_level, ElderlycareLevel, elderly_care, ElderlyCare)
+- LaundryLevel (or laundryLevel, laundry_level, LaundryLevel)
+- BabySitterLevel (or BabySitterLevel, baby_sitter_level)
+- phone (or mobile, phone, Mobile, Phone)
 
 🎯 Allowed Values (use EXACTLY as shown):
 
@@ -135,7 +127,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 - Marital Status: "Single - عازبة", "Married - متزوجة", "Divorced - مطلقة", "Separated - منفصلة"
 - Religion: "Islam - الإسلام", "Non-Muslim - غير مسلم", "Christianity - المسيحية"
 - Language Levels: "Expert - ممتاز", "Advanced - جيد جداً", "Intermediate - جيد", "Beginner - مبتدأ", "Non - لا تجيد"
-- Skills (washing, cooking, cleaning, ironing, sewing, childcare, elderlycare, laundry, BabySitter): same as Language Levels
+- Skills (CookingLevel, WashingLevel, CleaningLevel, IroningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel): same as Language Levels
 - Nationality: Must match exactly from database (e.g., "Uganda - أوغندا", "Ethiopia - إثيوبيا", "Kenya - كينيا", "Bengladesh - بنغلادش", "Philippines - الفلبين")
     `;
 
@@ -193,6 +185,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     });
   }
 });
+
 /**
  * @api {post} /process-document معالجة صورة
  * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص باستخدام Google Cloud Vision API
@@ -249,51 +242,42 @@ app.post('/prompt', async (req, res) => {
       - Do not translate or normalize values — keep them **exactly as in the reference list**.
       - If a field is missing, return null for that field.
       - Dates must be in **ISO format** (YYYY-MM-DD).
-      - \`skills\` should be a JSON stringified object with keys: washing, cooking, cleaning, ironing, sewing, childcare, elderlycare, laundry.
-      - \`languages_spoken\` should be a JSON stringified object with keys: Arabic, English.
       - Always return the output in valid JSON format.
       - All keys listed below are required - if a value is not found, return null for that key.
       
       Text: "${text}"
      
       📝 Required keys (all must be present, use null if not found):
-      - full_name (or name, Name)
-      - date_of_birth (or birthDate, BirthDate)
-      - age
-      - nationality (or Nationality)
-      - birth_place
-      - office_name (or officeName, OfficeName)
-      - company_name (or companyName, CompanyName)
-      - passport_issue_date (or passportStart, passportStartDate, PassportStartDate)
-      - passport_expiration (or passportEnd, passportEndDate, PassportEndDate)
-      - passport_number (or passport, PassportNumber)
-      - gender
-      - religion (or Religion)
-      - marital_status (or maritalStatus, MaritalStatus)
-      - job_title (or jobTitle, JobTitle, profession, Profession, job, Job)
-      - salary (or Salary)
-      - weight (or Weight)
-      - height (or Height)
-      - children_count (or children, Children)
-      - living_town
-      - skills (as JSON stringified object)
-      - languages_spoken (as JSON stringified object)
-      - educationLevel (or education_level, EducationLevel, education, Education)
-      - arabicLevel (or arabic_level, ArabicLevel, ArabicLanguageLeveL)
-      - englishLevel (or english_level, EnglishLevel, EnglishLanguageLevel)
-      - experienceField (or experience_field, ExperienceField, experience, Experience)
-      - experienceYears (or experience_years, ExperienceYears, years_of_experience)
-      - cookingLevel (or cooking_level, CookingLevel)
-      - washingLevel (or washing_level, WashingLevel)
-      - ironingLevel (or ironing_level, IroningLevel)
-      - cleaningLevel (or cleaning_level, CleaningLevel)
-      - sewingLevel (or sewing_level, SewingLevel)
-      - childcareLevel (or childcare_level, ChildcareLevel, babysitter, Babysitter)
-      - elderlycareLevel (or elderlycare_level, ElderlycareLevel, elderly_care, ElderlyCare)
-      - laundryLevel (or laundry_level, LaundryLevel)
-      - BabySitterLevel (or baby_sitter_level)
-      - contract_duration (or Contract_duration, ContractDuration, contractDuration)
-      - mobile (or phone, Mobile, Phone)
+      - Name (or full_name, name)
+      - dateofbirth (or date_of_birth, birthDate, BirthDate) - ISO format YYYY-MM-DD
+      - age (as integer string, e.g., "25")
+      - Nationalitycopy (or nationality, Nationality) - string value
+      - Religion (or religion)
+      - Passportnumber (or passport_number, passport, PassportNumber)
+      - PassportStart (or passport_issue_date, passportStart, passportStartDate, PassportStartDate) - ISO format YYYY-MM-DD
+      - PassportEnd (or passport_expiration, passportEnd, passportEndDate, PassportEndDate) - ISO format YYYY-MM-DD
+      - maritalstatus (or marital_status, maritalStatus, MaritalStatus)
+      - job (or job_title, jobTitle, JobTitle, profession, Profession)
+      - Salary (or salary)
+      - weight (as integer string, e.g., "60")
+      - height (as integer string, e.g., "165")
+      - children (or children_count, childrenCount) - as integer string
+      - officeName (or office_name, officeName, OfficeName)
+      - Education (or educationLevel, education_level, EducationLevel, education)
+      - EnglishLanguageLevel (or englishLevel, english_level, EnglishLevel, EnglishLanguageLevel)
+      - ArabicLanguageLeveL (or arabicLevel, arabic_level, ArabicLevel, ArabicLanguageLeveL)
+      - Experience (or experienceField, experience_field, ExperienceField, experience)
+      - ExperienceYears (or experienceYears, experience_years, ExperienceYears, years_of_experience)
+      - CookingLevel (or cookingLevel, cooking_level, CookingLevel)
+      - WashingLevel (or washingLevel, washing_level, WashingLevel)
+      - IroningLevel (or ironingLevel, ironing_level, IroningLevel)
+      - CleaningLevel (or cleaningLevel, cleaning_level, CleaningLevel)
+      - SewingLevel (or sewingLevel, sewing_level, SewingLevel)
+      - ChildcareLevel (or childcareLevel, childcare_level, ChildcareLevel, babysitter, Babysitter)
+      - ElderlycareLevel (or elderlycareLevel, elderlycare_level, ElderlycareLevel, elderly_care, ElderlyCare)
+      - LaundryLevel (or laundryLevel, laundry_level, LaundryLevel)
+      - BabySitterLevel (or BabySitterLevel, baby_sitter_level)
+      - phone (or mobile, phone, Mobile, Phone)
       
       🎯 Allowed Values (use EXACTLY as shown):
       - Experience: "Novice | مدربة بدون خبرة", "Intermediate | مدربة بخبرة متوسطة", "Well-experienced | خبرة جيدة", "Expert | خبرة ممتازة"
@@ -301,7 +285,8 @@ app.post('/prompt', async (req, res) => {
       - Marital Status: "Single - عازبة", "Married - متزوجة", "Divorced - مطلقة", "Separated - منفصلة"
       - Religion: "Islam - الإسلام", "Non-Muslim - غير مسلم", "Christianity - المسيحية"
       - Language Levels: "Expert - ممتاز", "Advanced - جيد جداً", "Intermediate - جيد", "Beginner - مبتدأ", "Non - لا تجيد"
-      - Skills (washing, cooking, cleaning, ironing, sewing, childcare, elderlycare, laundry, BabySitter): same as Language Levels
+      - Skills (CookingLevel, WashingLevel, CleaningLevel, IroningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel): same as Language Levels
+      - Nationality: Must match exactly from database (e.g., "Uganda - أوغندا", "Ethiopia - إثيوبيا", "Kenya - كينيا", "Bengladesh - بنغلادش", "Philippines - الفلبين")
     `;
     const result = await dynamicModel.generateContent(prompt);
     const response = await result.response;
@@ -309,7 +294,9 @@ app.post('/prompt', async (req, res) => {
     // Ensure the response is valid JSON
     let jsonResponse;
     try {
-      jsonResponse = JSON.parse(rawText);
+      // Clean the response: Remove ```json and ``` markers, trim whitespace
+      const cleanedText = rawText.replace(/```json\n?|\n?```/g, '').trim();
+      jsonResponse = JSON.parse(cleanedText);
       // Validate that the response is a flat object
       if (typeof jsonResponse !== 'object' || Array.isArray(jsonResponse) || jsonResponse === null) {
         throw new Error('Response is not a valid flat JSON object');
@@ -353,3 +340,4 @@ app.listen(port, () => {
   console.log(`✅ خادم Gemini يعمل على http://localhost:${port}`);
   console.log(`📋 فحص الحالة: http://localhost:${port}/health`);
 });
+
