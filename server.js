@@ -26,7 +26,7 @@ const upload = multer({
 });
 
 // Gemini API Configuration
-const API_KEY = process.env.GEMINI_API_KEY || "AIzaSyCvnu9jFkpki73oMquseZ7Rp6hcfgTNzys";
+const API_KEY = process.env.GEMINI_API_KEY;
 if (!API_KEY) {
   console.error('[ERROR] GEMINI_API_KEY غير موجود في ملف .env');
   process.exit(1);
