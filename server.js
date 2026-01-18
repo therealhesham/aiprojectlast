@@ -120,10 +120,11 @@ all keys are necessery if not found return it null
 - Marital Status: "Single - عازبة", "Married - متزوجة"  , "Separated -  منفصلة"
 - Religion: "Non-Muslim - غير مسلم", "Islam - الإسلام" , "Christianity - المسيحية"
 - Language Levels: "Beginner - مبتدأ", "Intermediate - جيد", "Advanced - جيد جداً", "Non - لا تجيد"
-- Skills (Laundry, Ironing, Cleaning, Cooking, Sewing, BabySitter): same as Language Levels
+- Skills (Laundry, Ironing,elderlycare,cleaning, Cooking, Sewing, BabySitter): same as Language Levels
 - Nationality is one of this (Uganda - أوغندا
 Ethiopia - إثيوبيا
 Kenya - كينيا
+
 Bengladesh - بنغلادش
 Philippines - الفلبين)
     `;
