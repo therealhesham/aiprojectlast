@@ -88,6 +88,7 @@ Extract information from the document and return ONLY a valid flat JSON object.
 - If a value is missing, return null.
 - Dates must be ISO format YYYY-MM-DD.
 - JSON only, no text, no markdown.
+- Use EXACTLY the values from the allowed lists below - do NOT translate or modify them.
 
 🧾 REQUIRED KEYS (ALL MUST EXIST):
 {
@@ -117,13 +118,61 @@ Extract information from the document and return ONLY a valid flat JSON object.
   "phone": null,
   "age": null,
   "officeName": null,
-  "NewOrder": null,
-  "Client": null,
   "experienceType": null,
   "PassportStart": null,
   "PassportEnd": null,
-  "Salary": null
+  "Salary": null,
+  "BabySitterLevel": null
 }
+
+🎯 ALLOWED VALUES (USE EXACTLY AS SHOWN - DO NOT MODIFY):
+
+📚 Education (Education field):
+- "Diploma - دبلوم"
+- "High school - ثانوي"
+- "Illiterate - غير متعلم"
+- "Literate - القراءة والكتابة"
+- "Primary school - ابتدائي"
+- "University level - جامعي"
+
+💼 Experience (Experience field):
+- "Novice | مدربة بدون خبرة"
+- "Intermediate | مدربة بخبرة متوسطة"
+- "Well-experienced | خبرة جيدة"
+- "Expert | خبرة ممتازة"
+
+📅 ExperienceYears (ExperienceYears field - based on Experience):
+- If Experience is "Novice | مدربة بدون خبرة" → "مدربة-Training"
+- If Experience is "Intermediate | مدربة بخبرة متوسطة" → "1-2 Years - سنوات"
+- If Experience is "Well-experienced | خبرة جيدة" → "3-4 Years - سنوات"
+- If Experience is "Expert | خبرة ممتازة" → "5 and More - وأكثر"
+
+👤 Marital Status (maritalstatus field):
+- "Single - عازبة"
+- "Married - متزوجة"
+- "Divorced - مطلقة"
+
+🕌 Religion (Religion field):
+- "Islam - الإسلام"
+- "Non-Muslim - غير مسلم"
+
+🌍 Language Levels (EnglishLanguageLevel, ArabicLanguageLeveL fields):
+- "Expert - ممتاز"
+- "Advanced - جيد جداً"
+- "Intermediate - جيد"
+- "Beginner - مبتدأ"
+- "Non - لا تجيد"
+
+🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel):
+- "Expert - ممتاز"
+- "Advanced - جيد جداً"
+- "Intermediate - جيد"
+- "Beginner - مبتدأ"
+- "Non - لا تجيد"
+
+🌐 Nationality (Nationality field):
+- Must match exactly from database format (e.g., "Uganda - أوغندا", "Ethiopia - إثيوبيا", "Kenya - كينيا", "Bengladesh - بنغلادش", "Philippines - الفلبين")
+- Keep the exact format as stored in the database
 `;
 
     // Send image and prompt to Gemini
@@ -168,24 +217,26 @@ Extract information from the document and return ONLY a valid flat JSON object.
         rawResponse: process.env.NODE_ENV === 'development' ? rawText : undefined
       });
     }
-const allowedKeys = [
-  "Name","Religion","Passportnumber","ExperienceYears","maritalstatus",
-  "Experience","dateofbirth","Nationality","job","Education",
-  "EnglishLanguageLevel","ArabicLanguageLeveL","SewingLevel","weight",
-  "height","childrencount","CleaningLevel","CookingLevel","WashingLevel",
-  "IroningLevel","ChildcareLevel","ElderlycareLevel","LaundryLevel",
-  "phone","age","officeName","NewOrder","Client","experienceType",
-  "PassportStart","PassportEnd","Salary"
-];
 
-const finalResponse = {};
+    const allowedKeys = [
+      "Name","Religion","Passportnumber","ExperienceYears","maritalstatus",
+      "Experience","dateofbirth","Nationality","job","Education",
+      "EnglishLanguageLevel","ArabicLanguageLeveL","SewingLevel","weight",
+      "height","childrencount","CleaningLevel","CookingLevel","WashingLevel",
+      "IroningLevel","ChildcareLevel","ElderlycareLevel","LaundryLevel",
+      "phone","age","officeName","experienceType",
+      "PassportStart","PassportEnd","Salary","BabySitterLevel"
+    ];
 
-allowedKeys.forEach(key => {
-  finalResponse[key] =
-    jsonResponse[key] !== undefined ? String(jsonResponse[key]) : null;
-});
+    const finalResponse = {};
 
-res.status(200).json({ jsonResponse: finalResponse });
+    allowedKeys.forEach(key => {
+      finalResponse[key] =
+        jsonResponse[key] !== undefined ? String(jsonResponse[key]) : null;
+    });
+
+    console.log('[INFO] استجابة Gemini المحللة:', finalResponse);
+    res.status(200).json({ jsonResponse: finalResponse });
 
   } catch (error) {
     console.error('[ERROR] خطأ أثناء معالجة الصورة:', error.message, error.stack);
@@ -245,59 +296,104 @@ app.post('/prompt', async (req, res) => {
   console.log('[INFO] إرسال النص إلى Gemini...');
   try {
     const prompt = `
-      Extract key information from the following text and return it as a **flat JSON object** (no nested fields, all values as strings).  
-      
-      ⚠️ Rules:
-      - Only use values from the allowed list below when filling fields like experience, education, marital_status, religion, language levels, skills.
-      - Do not translate or normalize values — keep them **exactly as in the reference list**.
-      - If a field is missing, return null for that field.
-      - Dates must be in **ISO format** (YYYY-MM-DD).
-      - Always return the output in valid JSON format.
-      - All keys listed below are required - if a value is not found, return null for that key.
-      
-      Text: "${text}"
-     
-      📝 Required keys (all must be present, use null if not found):
-      - Name (or full_name, name)
-      - dateofbirth (or date_of_birth, birthDate, BirthDate) - ISO format YYYY-MM-DD
-      - age (as integer string, e.g., "25")
-      - Nationalitycopy (or nationality, Nationality) - string value
-      - Religion (or religion)
-      - Passportnumber (or passport_number, passport, PassportNumber)
-      - PassportStart (or passport_issue_date, passportStart, passportStartDate, PassportStartDate) - ISO format YYYY-MM-DD
-      - PassportEnd (or passport_expiration, passportEnd, passportEndDate, PassportEndDate) - ISO format YYYY-MM-DD
-      - maritalstatus (or marital_status, maritalStatus, MaritalStatus)
-      - job (or job_title, jobTitle, JobTitle, profession, Profession)
-      - Salary (or salary)
-      - weight (as integer string, e.g., "60")
-      - height (as integer string, e.g., "165")
-      - children (or children_count, childrenCount) - as integer string
-      - officeName (or office_name, officeName, OfficeName)
-      - Education (or educationLevel, education_level, EducationLevel, education)
-      - EnglishLanguageLevel (or englishLevel, english_level, EnglishLevel, EnglishLanguageLevel)
-      - ArabicLanguageLeveL (or arabicLevel, arabic_level, ArabicLevel, ArabicLanguageLeveL)
-      - Experience (or experienceField, experience_field, ExperienceField, experience)
-      - ExperienceYears (or experienceYears, experience_years, ExperienceYears, years_of_experience)
-      - CookingLevel (or cookingLevel, cooking_level, CookingLevel)
-      - WashingLevel (or washingLevel, washing_level, WashingLevel)
-      - IroningLevel (or ironingLevel, ironing_level, IroningLevel)
-      - CleaningLevel (or cleaningLevel, cleaning_level, CleaningLevel)
-      - SewingLevel (or sewingLevel, sewing_level, SewingLevel)
-      - ChildcareLevel (or childcareLevel, childcare_level, ChildcareLevel, babysitter, Babysitter)
-      - ElderlycareLevel (or elderlycareLevel, elderlycare_level, ElderlycareLevel, elderly_care, ElderlyCare)
-      - LaundryLevel (or laundryLevel, laundry_level, LaundryLevel)
-      - BabySitterLevel (or BabySitterLevel, baby_sitter_level)
-      - phone (or mobile, phone, Mobile, Phone)
-      
-      🎯 Allowed Values (use EXACTLY as shown):
-      - Experience: "Novice | مدربة بدون خبرة", "Intermediate | مدربة بخبرة متوسطة", "Well-experienced | خبرة جيدة", "Expert | خبرة ممتازة"
-      - Education: "Illiterate - غير متعلم", "Literate - القراءة والكتابة", "Primary school - ابتدائي", "High school - ثانوي", "Diploma - دبلوم", "University level - جامعي"
-      - Marital Status: "Single - عازبة", "Married - متزوجة", "Divorced - مطلقة", "Separated - منفصلة"
-      - Religion: "Islam - الإسلام", "Non-Muslim - غير مسلم", "Christianity - المسيحية"
-      - Language Levels: "Expert - ممتاز", "Advanced - جيد جداً", "Intermediate - جيد", "Beginner - مبتدأ", "Non - لا تجيد"
-      - Skills (CookingLevel, WashingLevel, CleaningLevel, IroningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel): same as Language Levels
-      - Nationality: Must match exactly from database (e.g., "Uganda - أوغندا", "Ethiopia - إثيوبيا", "Kenya - كينيا", "Bengladesh - بنغلادش", "Philippines - الفلبين")
-    `;
+Extract information from the following text and return ONLY a valid flat JSON object.
+
+⚠️ STRICT RULES:
+- Return ONLY the keys listed below.
+- Do NOT add extra keys.
+- Do NOT change key names.
+- All values must be strings.
+- If a value is missing, return null.
+- Dates must be ISO format YYYY-MM-DD.
+- JSON only, no text, no markdown.
+- Use EXACTLY the values from the allowed lists below - do NOT translate or modify them.
+
+Text: "${text}"
+
+🧾 REQUIRED KEYS (ALL MUST EXIST):
+{
+  "Name": null,
+  "Religion": null,
+  "Passportnumber": null,
+  "ExperienceYears": null,
+  "maritalstatus": null,
+  "Experience": null,
+  "dateofbirth": null,
+  "Nationality": null,
+  "job": null,
+  "Education": null,
+  "EnglishLanguageLevel": null,
+  "ArabicLanguageLeveL": null,
+  "SewingLevel": null,
+  "weight": null,
+  "height": null,
+  "childrencount": null,
+  "CleaningLevel": null,
+  "CookingLevel": null,
+  "WashingLevel": null,
+  "IroningLevel": null,
+  "ChildcareLevel": null,
+  "ElderlycareLevel": null,
+  "LaundryLevel": null,
+  "phone": null,
+  "age": null,
+  "officeName": null,
+  "experienceType": null,
+  "PassportStart": null,
+  "PassportEnd": null,
+  "Salary": null,
+  "BabySitterLevel": null
+}
+
+🎯 ALLOWED VALUES (USE EXACTLY AS SHOWN - DO NOT MODIFY):
+
+📚 Education (Education field):
+- "Diploma - دبلوم"
+- "High school - ثانوي"
+- "Illiterate - غير متعلم"
+- "Literate - القراءة والكتابة"
+- "Primary school - ابتدائي"
+- "University level - جامعي"
+
+💼 Experience (Experience field):
+- "Novice | مدربة بدون خبرة"
+- "Intermediate | مدربة بخبرة متوسطة"
+- "Well-experienced | خبرة جيدة"
+- "Expert | خبرة ممتازة"
+
+📅 ExperienceYears (ExperienceYears field - based on Experience):
+- If Experience is "Novice | مدربة بدون خبرة" → "مدربة-Training"
+- If Experience is "Intermediate | مدربة بخبرة متوسطة" → "1-2 Years - سنوات"
+- If Experience is "Well-experienced | خبرة جيدة" → "3-4 Years - سنوات"
+- If Experience is "Expert | خبرة ممتازة" → "5 and More - وأكثر"
+
+👤 Marital Status (maritalstatus field):
+- "Single - عازبة"
+- "Married - متزوجة"
+- "Divorced - مطلقة"
+
+🕌 Religion (Religion field):
+- "Islam - الإسلام"
+- "Non-Muslim - غير مسلم"
+
+🌍 Language Levels (EnglishLanguageLevel, ArabicLanguageLeveL fields):
+- "Expert - ممتاز"
+- "Advanced - جيد جداً"
+- "Intermediate - جيد"
+- "Beginner - مبتدأ"
+- "Non - لا تجيد"
+
+🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel):
+- "Expert - ممتاز"
+- "Advanced - جيد جداً"
+- "Intermediate - جيد"
+- "Beginner - مبتدأ"
+- "Non - لا تجيد"
+
+🌐 Nationality (Nationality field):
+- Must match exactly from database format (e.g., "Uganda - أوغندا", "Ethiopia - إثيوبيا", "Kenya - كينيا", "Bengladesh - بنغلادش", "Philippines - الفلبين")
+- Keep the exact format as stored in the database
+`;
     const result = await dynamicModel.generateContent(prompt);
     const response = await result.response;
     const rawText = response.text();
@@ -350,4 +446,6 @@ app.listen(port, () => {
   console.log(`✅ خادم Gemini يعمل على http://localhost:${port}`);
   console.log(`📋 فحص الحالة: http://localhost:${port}/health`);
 });
+
+
 
