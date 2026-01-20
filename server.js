@@ -114,7 +114,7 @@ Extract information from the document and return ONLY a valid flat JSON object.
   "IroningLevel": null,
   "ChildcareLevel": null,
   "ElderlycareLevel": null,
-  "LaundryLevel": null,
+  
   "phone": null,
   "age": null,
   "officeName": null,
@@ -163,7 +163,7 @@ Extract information from the document and return ONLY a valid flat JSON object.
 - "Beginner - مبتدأ"
 - "Non - لا تجيد"
 
-🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel):
+🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel,  BabySitterLevel):
 - "Expert - ممتاز"
 - "Advanced - جيد جداً"
 - "Intermediate - جيد"
@@ -223,7 +223,7 @@ Extract information from the document and return ONLY a valid flat JSON object.
       "Experience","dateofbirth","Nationality","job","Education",
       "EnglishLanguageLevel","ArabicLanguageLeveL","SewingLevel","weight",
       "height","childrencount","CleaningLevel","CookingLevel","WashingLevel",
-      "IroningLevel","ChildcareLevel","ElderlycareLevel","LaundryLevel",
+      "IroningLevel","ChildcareLevel","ElderlycareLevel",
       "phone","age","officeName","experienceType",
       "PassportStart","PassportEnd","Salary","BabySitterLevel"
     ];
@@ -334,7 +334,7 @@ Text: "${text}"
   "IroningLevel": null,
   "ChildcareLevel": null,
   "ElderlycareLevel": null,
-  "LaundryLevel": null,
+  
   "phone": null,
   "age": null,
   "officeName": null,
@@ -383,7 +383,7 @@ Text: "${text}"
 - "Beginner - مبتدأ"
 - "Non - لا تجيد"
 
-🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel, LaundryLevel, BabySitterLevel):
+🛠️ Skills Levels (CookingLevel, WashingLevel, IroningLevel, CleaningLevel, SewingLevel, ChildcareLevel, ElderlycareLevel,  BabySitterLevel):
 - "Expert - ممتاز"
 - "Advanced - جيد جداً"
 - "Intermediate - جيد"
