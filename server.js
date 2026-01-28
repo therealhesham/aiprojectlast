@@ -32,7 +32,7 @@ if (!API_KEY) {
   process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 // Multer error handling middleware
 app.use((err, req, res, next) => {
@@ -56,7 +56,7 @@ app.use((err, req, res, next) => {
  * @api {post} /api/gemini معالجة الصورة باستخدام Gemini مباشرة
  * @apiDescription تحميل ملف صورة (PNG أو JPEG) واستخراج النص وتحليله باستخدام Gemini API
  * @apiParam {File} image الصورة المراد معالجتها (PNG أو JPEG، بحد أقصى 50 ميجابايت)
- * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-2.5-flash)
+ * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-1.5-flash)
  * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
  */
 app.post('/api/gemini', upload.single('image'), async (req, res) => {
@@ -66,7 +66,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     }
     
     // Get model name from request body or use default
-    const modelName = req.body.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const modelName = req.body.model || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     const dynamicModel = genAI.getGenerativeModel({ model: modelName });
     
     console.log(`[INFO] معالجة الصورة: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`);
@@ -278,7 +278,7 @@ app.post('/process-document', upload.single('document'), async (req, res) => {
  * @api {post} /prompt معالجة النص باستخدام Gemini API
  * @apiDescription إرسال نص مباشر إلى Gemini API لتنظيمه ككائن JSON مسطح
  * @apiParam {String} text النص المراد معالجته
- * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-2.5-flash)
+ * @apiParam {String} [model] اسم نموذج Gemini (اختياري، القيمة الافتراضية: gemini-1.5-flash)
  * @apiSuccess {Object} jsonResponse الكائن JSON المسطح المحتوي على الحقول المستخرجة
  */
 app.post('/prompt', async (req, res) => {
@@ -289,7 +289,7 @@ app.post('/prompt', async (req, res) => {
   }
   
   // Get model name from request body or use default
-  const selectedModel = modelName || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const selectedModel = modelName || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
   const dynamicModel = genAI.getGenerativeModel({ model: selectedModel });
   
   console.log(`[INFO] استخدام نموذج: ${selectedModel}`);
