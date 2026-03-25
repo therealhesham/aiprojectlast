@@ -5,13 +5,17 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 4444;
 
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+/* =========================
+   Multer
+========================= */
 const storage = multer.memoryStorage();
+
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
@@ -24,6 +28,9 @@ const upload = multer({
   }
 });
 
+/* =========================
+   Env
+========================= */
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 if (!OPENROUTER_API_KEY) {
   console.error('[ERROR] OPENROUTER_API_KEY غير موجود في ملف .env');
@@ -36,6 +43,15 @@ const DEFAULT_TEXT_MODEL =
 const DEFAULT_VISION_MODEL =
   process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash';
 
+const ENABLE_MODEL_FALLBACKS =
+  String(process.env.ENABLE_MODEL_FALLBACKS || 'true').toLowerCase() === 'true';
+
+const PDF_ENGINE =
+  process.env.OPENROUTER_PDF_ENGINE || 'pdf-text';
+
+/* =========================
+   Keys / Prompt Rules
+========================= */
 const ALLOWED_KEYS = [
   'Name',
   'Religion',
@@ -68,15 +84,6 @@ const ALLOWED_KEYS = [
   'Salary',
   'BabySitterLevel'
 ];
-
-const MODEL_MAP = {
-  'gemini-2.5-flash': 'google/gemini-2.5-flash',
-  'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
-  'gemini-flash': 'google/gemini-1.5-flash',
-  'gemini-1.5-flash': 'google/gemini-1.5-flash',
-  'gemini-pro': 'google/gemini-1.5-pro',
-  'gemini-1.5-pro': 'google/gemini-1.5-pro'
-};
 
 const PROMPT_RULES = `
 ⚠️ STRICT RULES:
@@ -173,21 +180,52 @@ const PROMPT_RULES = `
 - Keep the exact format as stored in the database
 `;
 
-function normalizeModelName(model, fallback = DEFAULT_TEXT_MODEL) {
-  if (!model || typeof model !== 'string') {
-    return fallback;
-  }
+/* =========================
+   Model Normalization
+========================= */
+const MODEL_MAP = {
+  'gemini-2.5-flash': 'google/gemini-2.5-flash',
+  'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
+  'gemini-flash': 'google/gemini-1.5-flash',
+  'gemini-1.5-flash': 'google/gemini-1.5-flash',
+  'gemini-pro': 'google/gemini-1.5-pro',
+  'gemini-1.5-pro': 'google/gemini-1.5-pro',
+  'gpt-4o': 'openai/gpt-4o',
+  'gpt-4o-mini': 'openai/gpt-4o-mini',
+  'claude-3.5-sonnet': 'anthropic/claude-3.5-sonnet'
+};
+
+function normalizeModelName(model, fallback) {
+  if (!model || typeof model !== 'string') return fallback;
 
   const trimmed = model.trim();
   if (!trimmed) return fallback;
 
-  if (MODEL_MAP[trimmed]) {
-    return MODEL_MAP[trimmed];
-  }
-
-  return trimmed;
+  return MODEL_MAP[trimmed] || trimmed;
 }
 
+function buildFallbackModels(primaryModel) {
+  const list = [primaryModel];
+
+  if (primaryModel.startsWith('google/')) {
+    if (primaryModel !== 'google/gemini-2.5-flash') {
+      list.push('google/gemini-2.5-flash');
+    }
+    if (primaryModel !== 'google/gemini-2.5-flash-lite') {
+      list.push('google/gemini-2.5-flash-lite');
+    }
+    list.push('openai/gpt-4o-mini');
+  } else {
+    list.push('google/gemini-2.5-flash');
+    list.push('google/gemini-2.5-flash-lite');
+  }
+
+  return [...new Set(list)];
+}
+
+/* =========================
+   Prompt Builders
+========================= */
 function buildTextPrompt(text) {
   return `
 Extract information from the following text and return ONLY a valid flat JSON object.
@@ -195,7 +233,7 @@ Extract information from the following text and return ONLY a valid flat JSON ob
 ${PROMPT_RULES}
 
 Text: "${text}"
-`.trim();
+  `.trim();
 }
 
 function buildDocumentPrompt() {
@@ -203,75 +241,12 @@ function buildDocumentPrompt() {
 Extract information from the document and return ONLY a valid flat JSON object.
 
 ${PROMPT_RULES}
-`.trim();
+  `.trim();
 }
 
-function normalizeFlatJson(rawText) {
-  const cleanedText = String(rawText || '')
-    .replace(/```json\s*|\s*```/g, '')
-    .trim();
-
-  const parsed = JSON.parse(cleanedText);
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('Response is not a valid flat JSON object');
-  }
-
-  const finalResponse = {};
-  for (const key of ALLOWED_KEYS) {
-    const value = parsed[key];
-
-    if (value === undefined || value === null) {
-      finalResponse[key] = null;
-    } else if (typeof value === 'object') {
-      finalResponse[key] = JSON.stringify(value);
-    } else {
-      finalResponse[key] = String(value);
-    }
-  }
-
-  return {
-    cleanedText,
-    finalResponse
-  };
-}
-
-async function callOpenRouter({
-  model,
-  messages,
-  plugins,
-  temperature = 0,
-  max_tokens = 1200
-}) {
-  const payload = {
-    model,
-    messages,
-    temperature,
-    max_tokens,
-    stream: false
-  };
-
-  if (plugins?.length) {
-    payload.plugins = plugins;
-  }
-
-  const response = await axios.post(
-    'https://openrouter.ai/api/v1/chat/completions',
-    payload,
-    {
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.APP_URL || 'http://localhost:4000',
-        'X-Title': process.env.APP_NAME || 'Document Extractor'
-      },
-      timeout: 180000
-    }
-  );
-
-  return response.data;
-}
-
+/* =========================
+   Response Helpers
+========================= */
 function extractAssistantText(data) {
   const message = data?.choices?.[0]?.message;
 
@@ -297,17 +272,111 @@ function extractAssistantText(data) {
   throw new Error('Unsupported OpenRouter response format');
 }
 
+function normalizeFlatJson(rawText) {
+  const cleanedText = String(rawText || '')
+    .replace(/```json\s*|\s*```/g, '')
+    .trim();
+
+  const parsed = JSON.parse(cleanedText);
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Response is not a valid flat JSON object');
+  }
+
+  const finalResponse = {};
+
+  for (const key of ALLOWED_KEYS) {
+    const value = parsed[key];
+    if (value === undefined || value === null) {
+      finalResponse[key] = null;
+    } else if (typeof value === 'object') {
+      finalResponse[key] = JSON.stringify(value);
+    } else {
+      finalResponse[key] = String(value);
+    }
+  }
+
+  return {
+    cleanedText,
+    finalResponse
+  };
+}
+
+function extractOpenRouterError(err) {
+  const payload = err?.response?.data || {};
+  const inner = payload?.error || {};
+
+  return {
+    status: err?.response?.status,
+    message: inner?.message || err.message,
+    code: inner?.code,
+    metadata: inner?.metadata || null,
+    raw: payload
+  };
+}
+
+/* =========================
+   OpenRouter Call
+========================= */
+async function callOpenRouter({
+  model,
+  messages,
+  plugins,
+  temperature = 0,
+  max_tokens = 1200,
+  useFallbackModels = true
+}) {
+  const payload = {
+    model,
+    messages,
+    temperature,
+    max_tokens,
+    stream: false,
+    debug: {
+      echo_upstream_body: true
+    }
+  };
+
+  if (plugins?.length) {
+    payload.plugins = plugins;
+  }
+
+  if (ENABLE_MODEL_FALLBACKS && useFallbackModels) {
+    payload.models = buildFallbackModels(model);
+  }
+
+  console.log('[DEBUG] OpenRouter payload:');
+  console.log(JSON.stringify(payload, null, 2));
+
+  const response = await axios.post(
+    'https://openrouter.ai/api/v1/chat/completions',
+    payload,
+    {
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.APP_URL || 'http://localhost:4444',
+        'X-Title': process.env.APP_NAME || 'Document Extractor'
+      },
+      timeout: 180000
+    }
+  );
+
+  return response.data;
+}
+
+/* =========================
+   Error Middleware
+========================= */
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-    console.error('[ERROR] فشل تحميل الملف: حجم الملف يتجاوز 50 ميجابايت');
     return res.status(400).json({
-      error: 'حجم الملف كبير جدًا. الحد الأقصى المسموح به هو 50 ميجابايت. الرجاء ضغط الصورة.',
+      error: 'حجم الملف كبير جدًا. الحد الأقصى المسموح به هو 50 ميجابايت.',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
 
   if (err?.message?.includes('الرجاء تحميل ملف صورة')) {
-    console.error('[ERROR] نوع الملف غير مدعوم:', err.message);
     return res.status(400).json({
       error: err.message,
       details: process.env.NODE_ENV === 'development' ? err.message : undefined,
@@ -316,6 +385,10 @@ app.use((err, req, res, next) => {
 
   next(err);
 });
+
+/* =========================
+   Routes
+========================= */
 
 // نفس الاسم للتوافق مع الفرونت
 app.post('/api/gemini', upload.single('image'), async (req, res) => {
@@ -338,7 +411,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     const base64Data = req.file.buffer.toString('base64');
 
     let messages;
-    let plugins;
+    let plugins = undefined;
 
     if (req.file.mimetype === 'application/pdf') {
       const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
@@ -363,7 +436,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
         {
           id: 'file-parser',
           pdf: {
-            engine: process.env.OPENROUTER_PDF_ENGINE || 'pdf-text'
+            engine: PDF_ENGINE
           }
         }
       ];
@@ -389,45 +462,43 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     const data = await callOpenRouter({
       model: modelName,
       messages,
-      plugins
+      plugins,
+      useFallbackModels: true
     });
 
     const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw model response:', rawText);
+
     const normalized = normalizeFlatJson(rawText);
 
     return res.status(200).json({
       jsonResponse: normalized.finalResponse
     });
   } catch (error) {
-    console.error(
-      '[ERROR] خطأ أثناء معالجة الملف:',
-      error.response?.data || error.message
-    );
+    const details = extractOpenRouterError(error);
 
-    return res.status(500).json({
-      error: 'حدث خطأ داخلي أثناء معالجة الملف.',
-      details:
-        process.env.NODE_ENV === 'development'
-          ? error.response?.data || error.message
-          : undefined
-    });
-  }
-});
+    console.error('[ERROR] خطأ أثناء معالجة الملف:', details.message);
 
-app.post('/process-document', upload.single('document'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
+    if (details?.metadata?.available_providers) {
+      console.error(
+        '[ERROR] available_providers:',
+        JSON.stringify(details.metadata.available_providers, null, 2)
+      );
     }
 
-    return res.status(200).json({
-      message: 'استخدم /api/gemini لمعالجة الصور وPDF عبر OpenRouter.'
-    });
-  } catch (error) {
-    console.error('[ERROR] أثناء معالجة الملف:', error.message);
-    return res.status(500).json({
-      error: 'حدث خطأ داخلي أثناء معالجة الملف.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    if (details?.metadata?.requested_providers) {
+      console.error(
+        '[ERROR] requested_providers:',
+        JSON.stringify(details.metadata.requested_providers, null, 2)
+      );
+    }
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء معالجة الملف.',
+      providerError: details.message,
+      available_providers: details?.metadata?.available_providers || undefined,
+      requested_providers: details?.metadata?.requested_providers || undefined,
+      details: process.env.NODE_ENV === 'development' ? details.raw : undefined
     });
   }
 });
@@ -456,27 +527,46 @@ app.post('/prompt', async (req, res) => {
           role: 'user',
           content: prompt
         }
-      ]
+      ],
+      useFallbackModels: true
     });
 
     const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw model response:', rawText);
+
     const normalized = normalizeFlatJson(rawText);
 
     return res.status(200).json({
       jsonResponse: normalized.finalResponse
     });
   } catch (error) {
-    console.error(
-      '[ERROR] خطأ أثناء معالجة النص:',
-      error.response?.data || error.message
-    );
+    const details = extractOpenRouterError(error);
 
+    console.error('[ERROR] خطأ أثناء معالجة النص:', details.message);
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء معالجة النص.',
+      providerError: details.message,
+      available_providers: details?.metadata?.available_providers || undefined,
+      requested_providers: details?.metadata?.requested_providers || undefined,
+      details: process.env.NODE_ENV === 'development' ? details.raw : undefined
+    });
+  }
+});
+
+app.post('/process-document', upload.single('document'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
+    }
+
+    return res.status(200).json({
+      message: 'استخدم /api/gemini لمعالجة الصور وPDF عبر OpenRouter.'
+    });
+  } catch (error) {
     return res.status(500).json({
-      error: 'حدث خطأ داخلي أثناء معالجة النص.',
-      details:
-        process.env.NODE_ENV === 'development'
-          ? error.response?.data || error.message
-          : undefined
+      error: 'حدث خطأ داخلي أثناء معالجة الملف.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -489,6 +579,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+/* =========================
+   Start
+========================= */
 app.listen(port, () => {
   console.log(`✅ Server running on http://localhost:${port}`);
   console.log(`📋 Health check: http://localhost:${port}/health`);
