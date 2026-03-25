@@ -30,23 +30,53 @@ if (!OPENROUTER_API_KEY) {
   process.exit(1);
 }
 
-// موديل افتراضي للنص
 const DEFAULT_TEXT_MODEL =
-  process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-2.5-flash-lite';
+  process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-2.5-flash';
 
-// موديل افتراضي للصور / المستندات
 const DEFAULT_VISION_MODEL =
-  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash-lite';
+  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash';
 
 const ALLOWED_KEYS = [
-  "Name","Religion","Passportnumber","ExperienceYears","maritalstatus",
-  "Experience","dateofbirth","Nationality","job","Education",
-  "EnglishLanguageLevel","ArabicLanguageLeveL","SewingLevel","weight",
-  "height","childrencount","CleaningLevel","CookingLevel","WashingLevel",
-  "IroningLevel","ChildcareLevel","ElderlycareLevel",
-  "phone","age","officeName","experienceType",
-  "PassportStart","PassportEnd","Salary","BabySitterLevel"
+  'Name',
+  'Religion',
+  'Passportnumber',
+  'ExperienceYears',
+  'maritalstatus',
+  'Experience',
+  'dateofbirth',
+  'Nationality',
+  'job',
+  'Education',
+  'EnglishLanguageLevel',
+  'ArabicLanguageLeveL',
+  'SewingLevel',
+  'weight',
+  'height',
+  'childrencount',
+  'CleaningLevel',
+  'CookingLevel',
+  'WashingLevel',
+  'IroningLevel',
+  'ChildcareLevel',
+  'ElderlycareLevel',
+  'phone',
+  'age',
+  'officeName',
+  'experienceType',
+  'PassportStart',
+  'PassportEnd',
+  'Salary',
+  'BabySitterLevel'
 ];
+
+const MODEL_MAP = {
+  'gemini-2.5-flash': 'google/gemini-2.5-flash',
+  'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
+  'gemini-flash': 'google/gemini-1.5-flash',
+  'gemini-1.5-flash': 'google/gemini-1.5-flash',
+  'gemini-pro': 'google/gemini-1.5-pro',
+  'gemini-1.5-pro': 'google/gemini-1.5-pro'
+};
 
 const PROMPT_RULES = `
 ⚠️ STRICT RULES:
@@ -143,6 +173,21 @@ const PROMPT_RULES = `
 - Keep the exact format as stored in the database
 `;
 
+function normalizeModelName(model, fallback = DEFAULT_TEXT_MODEL) {
+  if (!model || typeof model !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = model.trim();
+  if (!trimmed) return fallback;
+
+  if (MODEL_MAP[trimmed]) {
+    return MODEL_MAP[trimmed];
+  }
+
+  return trimmed;
+}
+
 function buildTextPrompt(text) {
   return `
 Extract information from the following text and return ONLY a valid flat JSON object.
@@ -175,6 +220,7 @@ function normalizeFlatJson(rawText) {
   const finalResponse = {};
   for (const key of ALLOWED_KEYS) {
     const value = parsed[key];
+
     if (value === undefined || value === null) {
       finalResponse[key] = null;
     } else if (typeof value === 'object') {
@@ -233,15 +279,13 @@ function extractAssistantText(data) {
     throw new Error('OpenRouter response did not contain a message');
   }
 
-  // أغلب الحالات
   if (typeof message.content === 'string') {
     return message.content;
   }
 
-  // بعض الموديلات قد ترجع content كمصفوفة
   if (Array.isArray(message.content)) {
     return message.content
-      .map(part => {
+      .map((part) => {
         if (typeof part === 'string') return part;
         if (part?.type === 'text') return part.text || '';
         return '';
@@ -253,7 +297,6 @@ function extractAssistantText(data) {
   throw new Error('Unsupported OpenRouter response format');
 }
 
-// Multer errors
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
     console.error('[ERROR] فشل تحميل الملف: حجم الملف يتجاوز 50 ميجابايت');
@@ -274,18 +317,17 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-/**
- * @api {post} /api/gemini
- * احتفظنا بالاسم كما هو للتوافق مع الفرونت الحالي
- * لكنه الآن يستخدم OpenRouter بدل Gemini SDK
- */
+// نفس الاسم للتوافق مع الفرونت
 app.post('/api/gemini', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
     }
 
-    const modelName = req.body.model || DEFAULT_VISION_MODEL;
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
 
     console.log(
       `[INFO] معالجة الملف: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`
@@ -296,7 +338,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     const base64Data = req.file.buffer.toString('base64');
 
     let messages;
-    let plugins = undefined;
+    let plugins;
 
     if (req.file.mimetype === 'application/pdf') {
       const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
@@ -317,8 +359,6 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
         }
       ];
 
-      // مجاني للنصوص الواضحة داخل PDF
-      // لو الـ PDF سكان أو صور، غيّره إلى mistral-ocr
       plugins = [
         {
           id: 'file-parser',
@@ -346,7 +386,6 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
       ];
     }
 
-    console.log('[INFO] إرسال الملف إلى OpenRouter...');
     const data = await callOpenRouter({
       model: modelName,
       messages,
@@ -354,83 +393,60 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     });
 
     const rawText = extractAssistantText(data);
-    console.log('[INFO] استجابة OpenRouter الخام:', rawText);
+    const normalized = normalizeFlatJson(rawText);
 
-    let normalized;
-    try {
-      normalized = normalizeFlatJson(rawText);
-    } catch (parseError) {
-      console.error('[ERROR] فشل تحليل استجابة OpenRouter:', parseError.message, rawText);
-      return res.status(500).json({
-        error: 'فشل في تحليل استجابة OpenRouter كـ JSON صالح.',
-        details: process.env.NODE_ENV === 'development' ? parseError.message : undefined,
-        rawResponse: process.env.NODE_ENV === 'development' ? rawText : undefined
-      });
-    }
-
-    console.log('[INFO] استجابة OpenRouter المحللة:', normalized.finalResponse);
-    res.status(200).json({ jsonResponse: normalized.finalResponse });
-
+    return res.status(200).json({
+      jsonResponse: normalized.finalResponse
+    });
   } catch (error) {
     console.error(
       '[ERROR] خطأ أثناء معالجة الملف:',
-      error.response?.data || error.message,
-      error.stack
+      error.response?.data || error.message
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'حدث خطأ داخلي أثناء معالجة الملف.',
-      details: process.env.NODE_ENV === 'development'
-        ? (error.response?.data || error.message)
-        : undefined
+      details:
+        process.env.NODE_ENV === 'development'
+          ? error.response?.data || error.message
+          : undefined
     });
   }
 });
 
-/**
- * @api {post} /process-document
- * احتفظنا به كما كان
- */
 app.post('/process-document', upload.single('document'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
     }
 
-    console.log(
-      `[INFO] معالجة الملف: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`
-    );
-
-    res.status(200).json({
-      message: 'هذا المسار مخصص سابقًا لـ Vision. استخدم /api/gemini لمعالجة الصور وPDF عبر OpenRouter مباشرة.'
+    return res.status(200).json({
+      message: 'استخدم /api/gemini لمعالجة الصور وPDF عبر OpenRouter.'
     });
-
   } catch (error) {
-    console.error('[ERROR] أثناء معالجة الملف:', error.message, error.stack);
-    res.status(500).json({
+    console.error('[ERROR] أثناء معالجة الملف:', error.message);
+    return res.status(500).json({
       error: 'حدث خطأ داخلي أثناء معالجة الملف.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 });
 
-/**
- * @api {post} /prompt
- * إرسال نص مباشر إلى OpenRouter
- */
 app.post('/prompt', async (req, res) => {
-  const { text, model: modelName } = req.body;
-
-  if (!text) {
-    return res.status(400).json({ error: 'الرجاء توفير نص للمعالجة.' });
-  }
-
-  const selectedModel = modelName || DEFAULT_TEXT_MODEL;
-
-  console.log(`[INFO] استخدام نموذج OpenRouter: ${selectedModel}`);
-  console.log('[INFO] إرسال النص إلى OpenRouter...');
-
   try {
+    const { text, model } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: 'الرجاء توفير نص للمعالجة.' });
+    }
+
+    const selectedModel = normalizeModelName(
+      model || DEFAULT_TEXT_MODEL,
+      DEFAULT_TEXT_MODEL
+    );
+
+    console.log(`[INFO] استخدام نموذج OpenRouter: ${selectedModel}`);
+
     const prompt = buildTextPrompt(text);
 
     const data = await callOpenRouter({
@@ -444,34 +460,23 @@ app.post('/prompt', async (req, res) => {
     });
 
     const rawText = extractAssistantText(data);
+    const normalized = normalizeFlatJson(rawText);
 
-    let normalized;
-    try {
-      normalized = normalizeFlatJson(rawText);
-    } catch (parseError) {
-      console.error('[ERROR] فشل تحليل استجابة OpenRouter:', parseError.message, rawText);
-      return res.status(500).json({
-        error: 'فشل في تحليل استجابة OpenRouter كـ JSON صالح.',
-        details: process.env.NODE_ENV === 'development' ? parseError.message : undefined,
-        rawResponse: process.env.NODE_ENV === 'development' ? rawText : undefined
-      });
-    }
-
-    console.log('[INFO] استجابة OpenRouter المحللة:', normalized.finalResponse);
-    res.status(200).json({ jsonResponse: normalized.finalResponse });
-
+    return res.status(200).json({
+      jsonResponse: normalized.finalResponse
+    });
   } catch (error) {
     console.error(
       '[ERROR] خطأ أثناء معالجة النص:',
-      error.response?.data || error.message,
-      error.stack
+      error.response?.data || error.message
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       error: 'حدث خطأ داخلي أثناء معالجة النص.',
-      details: process.env.NODE_ENV === 'development'
-        ? (error.response?.data || error.message)
-        : undefined,
+      details:
+        process.env.NODE_ENV === 'development'
+          ? error.response?.data || error.message
+          : undefined
     });
   }
 });
@@ -485,6 +490,6 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`✅ خادم OpenRouter يعمل على http://localhost:${port}`);
-  console.log(`📋 فحص الحالة: http://localhost:${port}/health`);
+  console.log(`✅ Server running on http://localhost:${port}`);
+  console.log(`📋 Health check: http://localhost:${port}/health`);
 });
