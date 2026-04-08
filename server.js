@@ -450,34 +450,34 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     let plugins = undefined;
     let data;
 
-    if (req.file.mimetype === 'application/pdf') {
-      const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
+if (req.file.mimetype === 'application/pdf') {
+  const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
 
-      messages = [
+  messages = [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
         {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'file',
-              file: {
-                filename: req.file.originalname || 'document.pdf',
-                fileData: pdfDataUrl
-              }
-            }
-          ]
-        }
-      ];
-
-      plugins = [
-        {
-          id: 'file-parser',
-          pdf: {
-            engine: PDF_ENGINE
+          type: 'file',
+          file: {
+            filename: req.file.originalname || 'document.pdf',
+            file_data: pdfDataUrl
           }
         }
-      ];
+      ]
+    }
+  ];
 
+  plugins = [
+    {
+      id: 'file-parser',
+      pdf: {
+        engine: PDF_ENGINE
+      }
+    }
+  ];
+}
       data = await callOpenRouterForPdfWithManualFallback({
         primaryModel: modelName,
         messages,
