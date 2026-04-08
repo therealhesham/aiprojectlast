@@ -329,10 +329,7 @@ async function callOpenRouter({
     messages,
     temperature,
     max_tokens,
-    stream: false,
-    debug: {
-      echo_upstream_body: true
-    }
+    stream: false
   };
 
   if (plugins?.length) {
@@ -461,8 +458,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
       model: modelName,
       messages,
       plugins,
-      useFallbackModels: true
-    });
+ useFallbackModels: req.file.mimetype !== 'application/pdf'    });
 
     const rawText = extractAssistantText(data);
     console.log('[DEBUG] Raw model response:', rawText);
@@ -526,7 +522,7 @@ app.post('/prompt', async (req, res) => {
           content: prompt
         }
       ],
-      useFallbackModels: true
+ useFallbackModels: req.file.mimetype !== 'application/pdf'
     });
 
     const rawText = extractAssistantText(data);
