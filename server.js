@@ -425,7 +425,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
               type: 'file',
               file: {
                 filename: req.file.originalname || 'document.pdf',
-                file_data: pdfDataUrl
+                fileData: pdfDataUrl
               }
             }
           ]
