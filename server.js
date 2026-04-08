@@ -462,7 +462,7 @@ if (req.file.mimetype === 'application/pdf') {
           type: 'file',
           file: {
             filename: req.file.originalname || 'document.pdf',
-            file_data: pdfDataUrl
+            fileData: pdfDataUrl // ✅ مهم
           }
         }
       ]
@@ -477,42 +477,43 @@ if (req.file.mimetype === 'application/pdf') {
       }
     }
   ];
-}
-      data = await callOpenRouterForPdfWithManualFallback({
-        primaryModel: modelName,
-        messages,
-        plugins,
-        temperature: 0,
-        max_tokens: 1200
-      });
-    } else {
-      const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
-      messages = [
+  // ✅ جوه الـ if
+  data = await callOpenRouterForPdfWithManualFallback({
+    primaryModel: modelName,
+    messages,
+    plugins,
+    temperature: 0,
+    max_tokens: 1200
+  });
+
+} else {
+  const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+  messages = [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
         {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageDataUrl
-              }
-            }
-          ]
+          type: 'image_url',
+          image_url: {
+            url: imageDataUrl
+          }
         }
-      ];
-
-      data = await callOpenRouter({
-        model: modelName,
-        messages,
-        plugins: undefined,
-        useFallbackModels: true,
-        temperature: 0,
-        max_tokens: 1200
-      });
+      ]
     }
+  ];
 
+  data = await callOpenRouter({
+    model: modelName,
+    messages,
+    plugins: undefined,
+    useFallbackModels: true,
+    temperature: 0,
+    max_tokens: 1200
+  });
+}
     const rawText = extractAssistantText(data);
     console.log('[DEBUG] Raw model response:', rawText);
 
