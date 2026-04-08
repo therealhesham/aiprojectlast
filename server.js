@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const axios = require('axios');
+const pdfParse = require('pdf-parse');
 require('dotenv').config();
 
 const app = express();
@@ -212,7 +213,6 @@ function buildFallbackModels(primaryModel) {
     if (primaryModel !== 'google/gemini-2.5-flash-lite') {
       list.push('google/gemini-2.5-flash-lite');
     }
-    list.push('openai/gpt-4o-mini');
   } else {
     list.push('google/gemini-2.5-flash');
     list.push('google/gemini-2.5-flash-lite');
@@ -248,6 +248,13 @@ Extract information from the document and return ONLY a valid flat JSON object.
 
 ${PROMPT_RULES}
   `.trim();
+}
+
+async function extractPdfTextForFallback(pdfBuffer) {
+  const parsed = await pdfParse(pdfBuffer);
+  const text = String(parsed?.text || '').replace(/\s+/g, ' ').trim();
+  // Keep prompt size controlled for model stability.
+  return text.slice(0, 20000);
 }
 
 /* =========================
@@ -496,7 +503,7 @@ app.use((err, req, res, next) => {
 /* =========================
    Routes
 ========================= */
-app.post('/api/gemini', upload.single('image'), async (req, res) => {
+async function handleGeminiExtraction(req, res) {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
@@ -534,15 +541,47 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
         }
       ];
 
-      data = await callOpenRouterForPdf({
-        primaryModel: modelName,
-        prompt,
-        filename: req.file.originalname || 'document.pdf',
-        pdfDataUrl,
-        plugins,
-        temperature: 0,
-        max_tokens: 1200
-      });
+      try {
+        data = await callOpenRouterForPdf({
+          primaryModel: modelName,
+          prompt,
+          filename: req.file.originalname || 'document.pdf',
+          pdfDataUrl,
+          plugins,
+          temperature: 0,
+          max_tokens: 1200
+        });
+      } catch (pdfUploadError) {
+        const details = extractOpenRouterError(pdfUploadError);
+        const message = String(details.message || '').toLowerCase();
+        const canFallbackToText =
+          message.includes('file data is missing') ||
+          message.includes('failed to parse');
+
+        if (!canFallbackToText) {
+          throw pdfUploadError;
+        }
+
+        console.warn('[WARN] PDF file upload failed, using local text extraction fallback');
+
+        const extractedText = await extractPdfTextForFallback(req.file.buffer);
+        if (!extractedText) {
+          throw new Error('تعذر استخراج نص من ملف PDF.');
+        }
+
+        data = await callOpenRouter({
+          model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
+          messages: [
+            {
+              role: 'user',
+              content: buildTextPrompt(extractedText)
+            }
+          ],
+          useFallbackModels: true,
+          temperature: 0,
+          max_tokens: 1200
+        });
+      }
     } else {
       const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
@@ -606,7 +645,10 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
       details: process.env.NODE_ENV === 'development' ? details.raw : undefined
     });
   }
-});
+}
+
+app.post('/api/gemini', upload.single('image'), handleGeminiExtraction);
+app.post('/gemini', upload.single('image'), handleGeminiExtraction);
 
 app.post('/prompt', async (req, res) => {
   try {
