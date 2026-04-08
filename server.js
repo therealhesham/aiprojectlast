@@ -208,9 +208,7 @@ function buildFallbackModels(primaryModel) {
   const list = [primaryModel];
 
   if (primaryModel.startsWith('google/')) {
-    if (primaryModel !== 'google/gemini-2.5-flash') {
-      list.push('google/gemini-2.5-flash');
-    }
+
     if (primaryModel !== 'google/gemini-2.5-flash-lite') {
       list.push('google/gemini-2.5-flash-lite');
     }
