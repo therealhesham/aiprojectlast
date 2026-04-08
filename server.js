@@ -47,7 +47,7 @@ const ENABLE_MODEL_FALLBACKS =
   String(process.env.ENABLE_MODEL_FALLBACKS || 'true').toLowerCase() === 'true';
 
 const PDF_ENGINE =
-  process.env.OPENROUTER_PDF_ENGINE || 'pdf-text';
+  process.env.OPENROUTER_PDF_ENGINE || 'cloudflare-ai';
 
 /* =========================
    Keys / Prompt Rules
