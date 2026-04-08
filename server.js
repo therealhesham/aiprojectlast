@@ -41,13 +41,13 @@ const DEFAULT_TEXT_MODEL =
   process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-2.5-flash';
 
 const DEFAULT_VISION_MODEL =
-  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash';
-
-const ENABLE_MODEL_FALLBACKS =
-  String(process.env.ENABLE_MODEL_FALLBACKS || 'true').toLowerCase() === 'true';
+  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash-lite';
 
 const PDF_ENGINE =
   process.env.OPENROUTER_PDF_ENGINE || 'cloudflare-ai';
+
+const ENABLE_MODEL_FALLBACKS =
+  String(process.env.ENABLE_MODEL_FALLBACKS || 'true').toLowerCase() === 'true';
 
 /* =========================
    Keys / Prompt Rules
@@ -197,10 +197,8 @@ const MODEL_MAP = {
 
 function normalizeModelName(model, fallback) {
   if (!model || typeof model !== 'string') return fallback;
-
   const trimmed = model.trim();
   if (!trimmed) return fallback;
-
   return MODEL_MAP[trimmed] || trimmed;
 }
 
@@ -208,6 +206,9 @@ function buildFallbackModels(primaryModel) {
   const list = [primaryModel];
 
   if (primaryModel.startsWith('google/')) {
+    if (primaryModel !== 'google/gemini-2.5-flash') {
+      list.push('google/gemini-2.5-flash');
+    }
     if (primaryModel !== 'google/gemini-2.5-flash-lite') {
       list.push('google/gemini-2.5-flash-lite');
     }
@@ -221,13 +222,11 @@ function buildFallbackModels(primaryModel) {
 }
 
 function getPdfModelCandidates(primaryModel) {
-  const normalized = normalizeModelName(primaryModel, DEFAULT_VISION_MODEL);
-
   return [
-    normalized,
+    normalizeModelName(primaryModel, DEFAULT_VISION_MODEL),
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite'
-  ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+  ].filter((v, i, arr) => v && arr.indexOf(v) === i);
 }
 
 /* =========================
@@ -291,7 +290,6 @@ function normalizeFlatJson(rawText) {
   }
 
   const finalResponse = {};
-
   for (const key of ALLOWED_KEYS) {
     const value = parsed[key];
     if (value === undefined || value === null) {
@@ -322,6 +320,36 @@ function extractOpenRouterError(err) {
   };
 }
 
+function logSafePayload(payload) {
+  const safePayload = JSON.parse(JSON.stringify(payload));
+
+  const content = safePayload?.messages?.[0]?.content;
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (item?.type === 'file' && item?.file?.file_data) {
+        item.file.file_data =
+          `[DATA_URL_PRESENT len=${item.file.file_data.length}] prefix=${item.file.file_data.slice(0, 30)}`;
+      }
+      if (item?.type === 'file' && item?.file?.fileData) {
+        item.file.fileData =
+          `[DATA_URL_PRESENT len=${item.file.fileData.length}] prefix=${item.file.fileData.slice(0, 30)}`;
+      }
+      if (item?.type === 'image_url' && item?.image_url?.url) {
+        item.image_url.url = '[BASE64_IMAGE_OMITTED]';
+      }
+    }
+  }
+
+  console.log('[DEBUG] OpenRouter payload (safe):');
+  console.log(JSON.stringify(safePayload, null, 2));
+}
+
+function isMissingFileDataError(error) {
+  const details = extractOpenRouterError(error);
+  const message = String(details.message || '').toLowerCase();
+  return message.includes('file data is missing');
+}
+
 /* =========================
    OpenRouter Call
 ========================= */
@@ -349,8 +377,7 @@ async function callOpenRouter({
     payload.models = buildFallbackModels(model);
   }
 
-  console.log('[DEBUG] OpenRouter payload:');
-  console.log(JSON.stringify(payload, null, 2));
+  logSafePayload(payload);
 
   const response = await axios.post(
     'https://openrouter.ai/api/v1/chat/completions',
@@ -369,36 +396,80 @@ async function callOpenRouter({
   return response.data;
 }
 
-async function callOpenRouterForPdfWithManualFallback({
+function buildPdfMessages(prompt, filename, pdfDataUrl, dataKeyStyle = 'snake') {
+  const fileObject =
+    dataKeyStyle === 'camel'
+      ? {
+          filename,
+          fileData: pdfDataUrl
+        }
+      : {
+          filename,
+          file_data: pdfDataUrl
+        };
+
+  return [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: prompt },
+        {
+          type: 'file',
+          file: fileObject
+        }
+      ]
+    }
+  ];
+}
+
+async function callOpenRouterForPdf({
   primaryModel,
-  messages,
+  prompt,
+  filename,
+  pdfDataUrl,
   plugins,
   temperature = 0,
   max_tokens = 1200
 }) {
-  const candidates = getPdfModelCandidates(primaryModel);
+  const models = getPdfModelCandidates(primaryModel);
+  const keyStyles = ['snake', 'camel']; // نجرب الاتنين بسبب اختلافات التنفيذ
   let lastError = null;
 
-  for (const model of candidates) {
-    try {
-      console.log(`[INFO] محاولة معالجة PDF باستخدام: ${model}`);
+  for (const keyStyle of keyStyles) {
+    for (const model of models) {
+      try {
+        console.log(`[INFO] محاولة PDF بالموديل: ${model}, keyStyle: ${keyStyle}`);
 
-      return await callOpenRouter({
-        model,
-        messages,
-        plugins,
-        temperature,
-        max_tokens,
-        useFallbackModels: false
-      });
-    } catch (error) {
-      const details = extractOpenRouterError(error);
-      lastError = error;
-      console.error(`[WARN] فشل PDF model ${model}: ${details.message}`);
+        const messages = buildPdfMessages(
+          prompt,
+          filename,
+          pdfDataUrl,
+          keyStyle
+        );
+
+        return await callOpenRouter({
+          model,
+          messages,
+          plugins,
+          temperature,
+          max_tokens,
+          useFallbackModels: false
+        });
+      } catch (error) {
+        const details = extractOpenRouterError(error);
+        lastError = error;
+        console.error(
+          `[WARN] فشل PDF model=${model} keyStyle=${keyStyle}: ${details.message}`
+        );
+
+        if (!isMissingFileDataError(error) && !String(details.message || '').toLowerCase().includes('failed to parse')) {
+          // لو الخطأ مختلف، نكمل نجرب موديل تاني برضه
+        }
+      }
     }
   }
 
-  throw lastError || new Error('All PDF model attempts failed');
+  throw lastError || new Error('All PDF attempts failed');
 }
 
 /* =========================
@@ -408,14 +479,14 @@ app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
     return res.status(400).json({
       error: 'حجم الملف كبير جدًا. الحد الأقصى المسموح به هو 50 ميجابايت.',
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 
   if (err?.message?.includes('الرجاء تحميل ملف صورة')) {
     return res.status(400).json({
       error: err.message,
-      details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 
@@ -425,8 +496,6 @@ app.use((err, req, res, next) => {
 /* =========================
    Routes
 ========================= */
-
-// نفس الاسم للتوافق مع الفرونت
 app.post('/api/gemini', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -441,79 +510,67 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
     console.log(
       `[INFO] معالجة الملف: ${req.file.originalname}, الحجم: ${(req.file.size / 1024 / 1024).toFixed(2)} ميجابايت`
     );
-    console.log(`[INFO] استخدام نموذج OpenRouter: ${modelName}`);
+    console.log(`[INFO] req.body.model: ${req.body.model || ''}`);
+    console.log(`[INFO] normalized modelName: ${modelName}`);
 
     const prompt = buildDocumentPrompt();
     const base64Data = req.file.buffer.toString('base64');
-
-    let messages;
-    let plugins = undefined;
     let data;
 
-if (req.file.mimetype === 'application/pdf') {
-  const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
+    if (req.file.mimetype === 'application/pdf') {
+      const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
 
-  messages = [
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
+      console.log('[DEBUG] pdf filename:', req.file.originalname);
+      console.log('[DEBUG] pdf mimetype:', req.file.mimetype);
+      console.log('[DEBUG] pdf size:', req.file.size);
+      console.log('[DEBUG] pdfDataUrl prefix:', pdfDataUrl.slice(0, 35));
+
+      const plugins = [
         {
-          type: 'file',
-          file: {
-            filename: req.file.originalname || 'document.pdf',
-            fileData: pdfDataUrl // ✅ مهم
+          id: 'file-parser',
+          pdf: {
+            engine: PDF_ENGINE
           }
         }
-      ]
-    }
-  ];
+      ];
 
-  plugins = [
-    {
-      id: 'file-parser',
-      pdf: {
-        engine: PDF_ENGINE
-      }
-    }
-  ];
+      data = await callOpenRouterForPdf({
+        primaryModel: modelName,
+        prompt,
+        filename: req.file.originalname || 'document.pdf',
+        pdfDataUrl,
+        plugins,
+        temperature: 0,
+        max_tokens: 1200
+      });
+    } else {
+      const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
-  // ✅ جوه الـ if
-  data = await callOpenRouterForPdfWithManualFallback({
-    primaryModel: modelName,
-    messages,
-    plugins,
-    temperature: 0,
-    max_tokens: 1200
-  });
-
-} else {
-  const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
-
-  messages = [
-    {
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
+      const messages = [
         {
-          type: 'image_url',
-          image_url: {
-            url: imageDataUrl
-          }
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: {
+                url: imageDataUrl
+              }
+            }
+          ]
         }
-      ]
-    }
-  ];
+      ];
 
-  data = await callOpenRouter({
-    model: modelName,
-    messages,
-    plugins: undefined,
-    useFallbackModels: true,
-    temperature: 0,
-    max_tokens: 1200
-  });
-}
+      data = await callOpenRouter({
+        model: modelName,
+        messages,
+        plugins: undefined,
+        useFallbackModels: true,
+        temperature: 0,
+        max_tokens: 1200
+      });
+    }
+
     const rawText = extractAssistantText(data);
     console.log('[DEBUG] Raw model response:', rawText);
 
@@ -627,9 +684,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-/* =========================
-   Start
-========================= */
 app.listen(port, () => {
   console.log(`✅ Server running on http://localhost:${port}`);
   console.log(`📋 Health check: http://localhost:${port}/health`);
