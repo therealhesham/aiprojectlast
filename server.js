@@ -208,7 +208,6 @@ function buildFallbackModels(primaryModel) {
   const list = [primaryModel];
 
   if (primaryModel.startsWith('google/')) {
-
     if (primaryModel !== 'google/gemini-2.5-flash-lite') {
       list.push('google/gemini-2.5-flash-lite');
     }
@@ -219,6 +218,16 @@ function buildFallbackModels(primaryModel) {
   }
 
   return [...new Set(list)];
+}
+
+function getPdfModelCandidates(primaryModel) {
+  const normalized = normalizeModelName(primaryModel, DEFAULT_VISION_MODEL);
+
+  return [
+    normalized,
+    'google/gemini-2.5-flash',
+    'google/gemini-2.5-flash-lite'
+  ].filter((value, index, arr) => value && arr.indexOf(value) === index);
 }
 
 /* =========================
@@ -360,6 +369,38 @@ async function callOpenRouter({
   return response.data;
 }
 
+async function callOpenRouterForPdfWithManualFallback({
+  primaryModel,
+  messages,
+  plugins,
+  temperature = 0,
+  max_tokens = 1200
+}) {
+  const candidates = getPdfModelCandidates(primaryModel);
+  let lastError = null;
+
+  for (const model of candidates) {
+    try {
+      console.log(`[INFO] محاولة معالجة PDF باستخدام: ${model}`);
+
+      return await callOpenRouter({
+        model,
+        messages,
+        plugins,
+        temperature,
+        max_tokens,
+        useFallbackModels: false
+      });
+    } catch (error) {
+      const details = extractOpenRouterError(error);
+      lastError = error;
+      console.error(`[WARN] فشل PDF model ${model}: ${details.message}`);
+    }
+  }
+
+  throw lastError || new Error('All PDF model attempts failed');
+}
+
 /* =========================
    Error Middleware
 ========================= */
@@ -407,6 +448,7 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
 
     let messages;
     let plugins = undefined;
+    let data;
 
     if (req.file.mimetype === 'application/pdf') {
       const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
@@ -435,6 +477,14 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
           }
         }
       ];
+
+      data = await callOpenRouterForPdfWithManualFallback({
+        primaryModel: modelName,
+        messages,
+        plugins,
+        temperature: 0,
+        max_tokens: 1200
+      });
     } else {
       const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
@@ -452,13 +502,16 @@ app.post('/api/gemini', upload.single('image'), async (req, res) => {
           ]
         }
       ];
-    }
 
-    const data = await callOpenRouter({
-      model: modelName,
-      messages,
-      plugins,
- useFallbackModels: req.file.mimetype !== 'application/pdf'    });
+      data = await callOpenRouter({
+        model: modelName,
+        messages,
+        plugins: undefined,
+        useFallbackModels: true,
+        temperature: 0,
+        max_tokens: 1200
+      });
+    }
 
     const rawText = extractAssistantText(data);
     console.log('[DEBUG] Raw model response:', rawText);
@@ -522,7 +575,7 @@ app.post('/prompt', async (req, res) => {
           content: prompt
         }
       ],
- useFallbackModels: req.file.mimetype !== 'application/pdf'
+      useFallbackModels: true
     });
 
     const rawText = extractAssistantText(data);
