@@ -182,6 +182,48 @@ const PROMPT_RULES = `
 `;
 
 /* =========================
+   Tickets (tickets_details) extraction
+========================= */
+const TICKETS_DETAILS_KEYS = [
+  'ticketFile',
+  'reference_id',
+  'airlines',
+  'flight_number',
+  'departure_date',
+  'departure_time',
+  'arrival_date',
+  'arrival_time',
+  'departure_airport',
+  'arrival_airport'
+];
+
+const PROMPT_RULES_TICKETS = `
+⚠️ STRICT RULES:
+- Return ONLY a valid flat JSON object with EXACTLY the keys listed below.
+- Do NOT add extra keys. Do NOT rename keys.
+- If a value is missing on the ticket, use null.
+- JSON only, no markdown, no commentary.
+- departure_date and arrival_date: ISO date YYYY-MM-DD when known, else null.
+- departure_time and arrival_time: string as on ticket (e.g. "14:30" or "2:30 PM"), else null.
+- reference_id: PNR / booking reference / ticket number if visible.
+- departure_airport and arrival_airport: IATA codes (3 letters) when possible, else full name.
+
+🧾 REQUIRED KEYS (ALL MUST EXIST):
+{
+  "ticketFile": null,
+  "reference_id": null,
+  "airlines": null,
+  "flight_number": null,
+  "departure_date": null,
+  "departure_time": null,
+  "arrival_date": null,
+  "arrival_time": null,
+  "departure_airport": null,
+  "arrival_airport": null
+}
+`;
+
+/* =========================
    Model Normalization
 ========================= */
 const MODEL_MAP = {
@@ -250,6 +292,24 @@ ${PROMPT_RULES}
   `.trim();
 }
 
+function buildTicketTextPrompt(text) {
+  return `
+Extract flight ticket / boarding pass information from the following text and return ONLY a valid flat JSON object.
+
+${PROMPT_RULES_TICKETS}
+
+Text: "${text}"
+  `.trim();
+}
+
+function buildTicketDocumentPrompt() {
+  return `
+Extract flight ticket or boarding pass information from the image or PDF and return ONLY a valid flat JSON object.
+
+${PROMPT_RULES_TICKETS}
+  `.trim();
+}
+
 async function extractPdfTextForFallback(pdfBuffer) {
   const parsed = await pdfParse(pdfBuffer);
   const text = String(parsed?.text || '').replace(/\s+/g, ' ').trim();
@@ -312,6 +372,40 @@ function normalizeFlatJson(rawText) {
     cleanedText,
     finalResponse
   };
+}
+
+function normalizeTicketsDetailsJson(rawText) {
+  const cleanedText = String(rawText || '')
+    .replace(/```json\s*|\s*```/g, '')
+    .trim();
+
+  const parsed = JSON.parse(cleanedText);
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Response is not a valid flat JSON object');
+  }
+
+  const extracted = {};
+  for (const key of TICKETS_DETAILS_KEYS) {
+    const value = parsed[key];
+    if (value === undefined || value === null) {
+      extracted[key] = null;
+    } else if (typeof value === 'object') {
+      extracted[key] = JSON.stringify(value);
+    } else {
+      extracted[key] = String(value);
+    }
+  }
+
+  const tickets_details = {
+    id: null,
+    order_id: null,
+    createdAt: null,
+    updatedAt: null,
+    ...extracted
+  };
+
+  return { cleanedText, tickets_details };
 }
 
 function extractOpenRouterError(err) {
@@ -647,8 +741,156 @@ async function handleGeminiExtraction(req, res) {
   }
 }
 
+function parseOptionalInt(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number.parseInt(String(value), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function handleTicketsExtraction(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي ملف.' });
+    }
+
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
+
+    const order_id = parseOptionalInt(req.body.order_id);
+    const ticketFile =
+      req.body.ticketFile != null && String(req.body.ticketFile).trim() !== ''
+        ? String(req.body.ticketFile).trim()
+        : null;
+
+    console.log(
+      `[INFO] tickets_details: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB`
+    );
+
+    const prompt = buildTicketDocumentPrompt();
+    const base64Data = req.file.buffer.toString('base64');
+    let data;
+
+    if (req.file.mimetype === 'application/pdf') {
+      const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
+      const plugins = [
+        {
+          id: 'file-parser',
+          pdf: {
+            engine: PDF_ENGINE
+          }
+        }
+      ];
+
+      try {
+        data = await callOpenRouterForPdf({
+          primaryModel: modelName,
+          prompt,
+          filename: req.file.originalname || 'ticket.pdf',
+          pdfDataUrl,
+          plugins,
+          temperature: 0,
+          max_tokens: 1500
+        });
+      } catch (pdfUploadError) {
+        const details = extractOpenRouterError(pdfUploadError);
+        const message = String(details.message || '').toLowerCase();
+        const canFallbackToText =
+          message.includes('file data is missing') ||
+          message.includes('failed to parse');
+
+        if (!canFallbackToText) {
+          throw pdfUploadError;
+        }
+
+        console.warn('[WARN] PDF ticket: fallback to text extraction');
+
+        const extractedText = await extractPdfTextForFallback(req.file.buffer);
+        if (!extractedText) {
+          throw new Error('تعذر استخراج نص من ملف PDF.');
+        }
+
+        data = await callOpenRouter({
+          model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
+          messages: [
+            {
+              role: 'user',
+              content: buildTicketTextPrompt(extractedText)
+            }
+          ],
+          useFallbackModels: true,
+          temperature: 0,
+          max_tokens: 1500
+        });
+      }
+    } else {
+      const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+      data = await callOpenRouter({
+        model: modelName,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageDataUrl
+                }
+              }
+            ]
+          }
+        ],
+        plugins: undefined,
+        useFallbackModels: true,
+        temperature: 0,
+        max_tokens: 1500
+      });
+    }
+
+    const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw ticket model response:', rawText);
+
+    const { tickets_details } = normalizeTicketsDetailsJson(rawText);
+
+    if (order_id !== null) {
+      tickets_details.order_id = order_id;
+    }
+    if (ticketFile !== null) {
+      tickets_details.ticketFile = ticketFile;
+    }
+
+    return res.status(200).json({ tickets_details });
+  } catch (error) {
+    const details = extractOpenRouterError(error);
+
+    console.error('[ERROR] extractdatafromtickets:', details.message);
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء استخراج بيانات التذكرة.',
+      providerError: details.message,
+      available_providers: details?.metadata?.available_providers || undefined,
+      requested_providers: details?.metadata?.requested_providers || undefined,
+      details: process.env.NODE_ENV === 'development' ? details.raw : undefined
+    });
+  }
+}
+
 app.post('/api/gemini', upload.single('image'), handleGeminiExtraction);
 app.post('/gemini', upload.single('image'), handleGeminiExtraction);
+
+app.post(
+  '/extractdatafromtickets',
+  upload.single('image'),
+  handleTicketsExtraction
+);
+app.post(
+  '/api/extractdatafromtickets',
+  upload.single('image'),
+  handleTicketsExtraction
+);
 
 app.post('/prompt', async (req, res) => {
   try {
