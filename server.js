@@ -505,13 +505,13 @@ function buildPdfMessages(prompt, filename, pdfDataUrl, dataKeyStyle = 'snake') 
   const fileObject =
     dataKeyStyle === 'camel'
       ? {
-          filename,
-          fileData: pdfDataUrl
-        }
+        filename,
+        fileData: pdfDataUrl
+      }
       : {
-          filename,
-          file_data: pdfDataUrl
-        };
+        filename,
+        file_data: pdfDataUrl
+      };
 
   return [
     {
@@ -649,36 +649,63 @@ async function handleGeminiExtraction(req, res) {
           temperature: 0,
           max_tokens: 1200
         });
+
+        const checkRaw = extractAssistantText(data);
+        const checkNorm = normalizeFlatJson(checkRaw);
+        const validValues = Object.values(checkNorm.finalResponse).filter(v => v !== null && v !== '');
+        if (validValues.length === 0) {
+           throw new Error('failed to parse: model returned empty data');
+        }
       } catch (pdfUploadError) {
-        const details = extractOpenRouterError(pdfUploadError);
-        const message = String(details.message || '').toLowerCase();
-        const canFallbackToText =
-          message.includes('file data is missing') ||
-          message.includes('failed to parse');
+        try {
+          console.log('[INFO] المحاولة الثانية باستخدام المحرك native...');
+          data = await callOpenRouterForPdf({
+            primaryModel: modelName,
+            prompt,
+            filename: req.file.originalname || 'document.pdf',
+            pdfDataUrl,
+            plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }],
+            temperature: 0,
+            max_tokens: 1200
+          });
 
-        if (!canFallbackToText) {
-          throw pdfUploadError;
+          const checkRawNative = extractAssistantText(data);
+          const checkNormNative = normalizeFlatJson(checkRawNative);
+          const validValuesNative = Object.values(checkNormNative.finalResponse).filter(v => v !== null && v !== '');
+          if (validValuesNative.length === 0) {
+             throw new Error('failed to parse: native returned empty data');
+          }
+        } catch (nativeError) {
+          const details = extractOpenRouterError(nativeError);
+          const message = String(details.message || '').toLowerCase();
+          const canFallbackToText =
+            message.includes('file data is missing') ||
+            message.includes('failed to parse');
+
+          if (!canFallbackToText) {
+            throw nativeError;
+          }
+
+          console.warn('[WARN] PDF file upload failed, using local text extraction fallback');
+
+          const extractedText = await extractPdfTextForFallback(req.file.buffer);
+          if (!extractedText) {
+            throw new Error('تعذر استخراج نص من ملف PDF.');
+          }
+
+          data = await callOpenRouter({
+            model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
+            messages: [
+              {
+                role: 'user',
+                content: buildTextPrompt(extractedText)
+              }
+            ],
+            useFallbackModels: true,
+            temperature: 0,
+            max_tokens: 1200
+          });
         }
-
-        console.warn('[WARN] PDF file upload failed, using local text extraction fallback');
-
-        const extractedText = await extractPdfTextForFallback(req.file.buffer);
-        if (!extractedText) {
-          throw new Error('تعذر استخراج نص من ملف PDF.');
-        }
-
-        data = await callOpenRouter({
-          model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
-          messages: [
-            {
-              role: 'user',
-              content: buildTextPrompt(extractedText)
-            }
-          ],
-          useFallbackModels: true,
-          temperature: 0,
-          max_tokens: 1200
-        });
       }
     } else {
       const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
@@ -797,36 +824,71 @@ async function handleTicketsExtraction(req, res) {
           temperature: 0,
           max_tokens: 1500
         });
+
+        const checkRaw = extractAssistantText(data);
+        const { tickets_details } = normalizeTicketsDetailsJson(checkRaw);
+        const validValues = Object.keys(tickets_details)
+            .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
+            .map(k => tickets_details[k])
+            .filter(v => v !== null && v !== '');
+            
+        if (validValues.length === 0) {
+           throw new Error('failed to parse: model returned empty data');
+        }
       } catch (pdfUploadError) {
-        const details = extractOpenRouterError(pdfUploadError);
-        const message = String(details.message || '').toLowerCase();
-        const canFallbackToText =
-          message.includes('file data is missing') ||
-          message.includes('failed to parse');
+        try {
+          console.log('[INFO] المحاولة الثانية للتذكرة باستخدام المحرك native...');
+          data = await callOpenRouterForPdf({
+            primaryModel: modelName,
+            prompt,
+            filename: req.file.originalname || 'ticket.pdf',
+            pdfDataUrl,
+            plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }],
+            temperature: 0,
+            max_tokens: 1500
+          });
 
-        if (!canFallbackToText) {
-          throw pdfUploadError;
+          const checkRawNative = extractAssistantText(data);
+          const { tickets_details } = normalizeTicketsDetailsJson(checkRawNative);
+          const validValuesNative = Object.keys(tickets_details)
+              .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
+              .map(k => tickets_details[k])
+              .filter(v => v !== null && v !== '');
+              
+          if (validValuesNative.length === 0) {
+             throw new Error('failed to parse: native returned empty data');
+          }
+        } catch (nativeError) {
+          const details = extractOpenRouterError(nativeError);
+          const message = String(details.message || '').toLowerCase();
+          const canFallbackToText =
+            message.includes('file data is missing') ||
+            message.includes('failed to parse');
+
+          if (!canFallbackToText) {
+            throw nativeError;
+          }
+
+          console.warn('[WARN] PDF ticket: fallback to text extraction');
+
+          const extractedText = await extractPdfTextForFallback(req.file.buffer);
+          if (!extractedText) {
+            throw new Error('تعذر استخراج نص من ملف PDF.');
+          }
+
+          data = await callOpenRouter({
+            model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
+            messages: [
+              {
+                role: 'user',
+                content: buildTicketTextPrompt(extractedText)
+              }
+            ],
+            useFallbackModels: true,
+            temperature: 0,
+            max_tokens: 1500
+          });
         }
-
-        console.warn('[WARN] PDF ticket: fallback to text extraction');
-
-        const extractedText = await extractPdfTextForFallback(req.file.buffer);
-        if (!extractedText) {
-          throw new Error('تعذر استخراج نص من ملف PDF.');
-        }
-
-        data = await callOpenRouter({
-          model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
-          messages: [
-            {
-              role: 'user',
-              content: buildTicketTextPrompt(extractedText)
-            }
-          ],
-          useFallbackModels: true,
-          temperature: 0,
-          max_tokens: 1500
-        });
       }
     } else {
       const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
