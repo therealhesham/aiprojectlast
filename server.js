@@ -247,13 +247,14 @@ const PROMPT_RULES_CAR_INSPECTION = `
 - Do NOT add extra keys. Do NOT rename keys.
 - If a value is missing or cannot be determined from the images, use null.
 - JSON only, no markdown, no commentary.
-- meter_reading: string or number of the odometer reading.
-- fuel_level: string (e.g. "Full", "Half", "Quarter", "Empty").
-- dashboard_warnings: string describing any lit warning lights, or null.
-- exterior_damages: an array of objects like [{"part": "front_bumper", "type": "scratch", "severity": "minor"}], or null if none.
-- interior_status: string describing the interior.
-- missing_items: string describing missing items like fire extinguisher.
-- ai_summary: a brief text summary of the overall car condition.
+- ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity) MUST be written in Arabic language ONLY.
+- meter_reading: string or number of the odometer reading (write numbers clearly, e.g. "124500").
+- fuel_level: string in Arabic (e.g. "ممتلئ", "النصف", "الربع", "فارغ").
+- dashboard_warnings: string describing any lit warning lights in Arabic, or null.
+- exterior_damages: an array of objects like [{"part": "الصدام الأمامي", "type": "خدش", "severity": "خفيف"}], or null if none.
+- interior_status: string describing the interior in Arabic.
+- missing_items: string describing missing items like fire extinguisher in Arabic.
+- ai_summary: a brief text summary of the overall car condition in Arabic.
 - is_clean: boolean (true/false).
 
 🧾 REQUIRED KEYS (ALL MUST EXIST):
