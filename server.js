@@ -247,10 +247,18 @@ const PROMPT_RULES_CAR_INSPECTION = `
 - Do NOT add extra keys. Do NOT rename keys.
 - If a value is missing or cannot be determined from the images, use null.
 - JSON only, no markdown, no commentary.
+
+🛑 CRITICAL ANTI-HALLUCINATION RULES:
+1. DASHBOARD WARNINGS: ONLY report warning lights that are actively illuminated (lit up in RED or YELLOW) such as Check Engine, ABS, Battery, or Oil. Do NOT report unlit icons printed on the dashboard. Do NOT guess. If no warning lights are actively lit, return null.
+2. EXTERIOR DAMAGES: Be extremely conservative. Do NOT mistake reflections, dirt, water spots, glare, or shadows for scratches or dents. ONLY report a damage if it is clearly and undeniably a scratch, dent, or crack. If in doubt, do not list it.
+3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
+4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields (meter, fuel, warnings).
+
+📝 ARABIC LANGUAGE REQUIREMENT:
 - ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity) MUST be written in Arabic language ONLY.
 - meter_reading: string or number of the odometer reading (write numbers clearly, e.g. "124500").
 - fuel_level: string in Arabic (e.g. "ممتلئ", "النصف", "الربع", "فارغ").
-- dashboard_warnings: string describing any lit warning lights in Arabic, or null.
+- dashboard_warnings: string describing actively lit warning lights in Arabic, or null.
 - exterior_damages: an array of objects like [{"part": "الصدام الأمامي", "type": "خدش", "severity": "خفيف"}], or null if none.
 - interior_status: string describing the interior in Arabic.
 - missing_items: string describing missing items like fire extinguisher in Arabic.
