@@ -228,6 +228,48 @@ const PROMPT_RULES_TICKETS = `
 `;
 
 /* =========================
+   Car Inspection extraction (Completely separated)
+========================= */
+const CAR_INSPECTION_KEYS = [
+  'meter_reading',
+  'fuel_level',
+  'dashboard_warnings',
+  'exterior_damages',
+  'interior_status',
+  'missing_items',
+  'ai_summary',
+  'is_clean'
+];
+
+const PROMPT_RULES_CAR_INSPECTION = `
+⚠️ STRICT RULES:
+- Return ONLY a valid flat JSON object with EXACTLY the keys listed below.
+- Do NOT add extra keys. Do NOT rename keys.
+- If a value is missing or cannot be determined from the images, use null.
+- JSON only, no markdown, no commentary.
+- meter_reading: string or number of the odometer reading.
+- fuel_level: string (e.g. "Full", "Half", "Quarter", "Empty").
+- dashboard_warnings: string describing any lit warning lights, or null.
+- exterior_damages: an array of objects like [{"part": "front_bumper", "type": "scratch", "severity": "minor"}], or null if none.
+- interior_status: string describing the interior.
+- missing_items: string describing missing items like fire extinguisher.
+- ai_summary: a brief text summary of the overall car condition.
+- is_clean: boolean (true/false).
+
+🧾 REQUIRED KEYS (ALL MUST EXIST):
+{
+  "meter_reading": null,
+  "fuel_level": null,
+  "dashboard_warnings": null,
+  "exterior_damages": null,
+  "interior_status": null,
+  "missing_items": null,
+  "ai_summary": null,
+  "is_clean": null
+}
+`;
+
+/* =========================
    Model Normalization
 ========================= */
 const MODEL_MAP = {
@@ -311,6 +353,15 @@ function buildTicketDocumentPrompt() {
 Extract flight ticket or boarding pass information from the image or PDF and return ONLY a valid flat JSON object.
 
 ${PROMPT_RULES_TICKETS}
+  `.trim();
+}
+
+function buildCarInspectionPrompt() {
+  return `
+You are an expert car inspector. Analyze these images of a car check-in/check-out process.
+Extract the car condition and return ONLY a valid flat JSON object.
+
+${PROMPT_RULES_CAR_INSPECTION}
   `.trim();
 }
 
@@ -410,6 +461,25 @@ function normalizeTicketsDetailsJson(rawText) {
   };
 
   return { cleanedText, tickets_details };
+}
+
+function normalizeCarInspectionJson(rawText) {
+  const cleanedText = String(rawText || '')
+    .replace(/```json\s*|\s*```/g, '')
+    .trim();
+
+  const parsed = JSON.parse(cleanedText);
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Response is not a valid flat JSON object');
+  }
+
+  const extracted = {};
+  for (const key of CAR_INSPECTION_KEYS) {
+    extracted[key] = parsed[key] !== undefined ? parsed[key] : null;
+  }
+
+  return { cleanedText, inspection_details: extracted };
 }
 
 function extractOpenRouterError(err) {
@@ -654,7 +724,7 @@ async function handleGeminiExtraction(req, res) {
         const checkNorm = normalizeFlatJson(checkRaw);
         const validValues = Object.values(checkNorm.finalResponse).filter(v => v !== null && v !== '');
         if (validValues.length === 0) {
-           throw new Error('failed to parse: model returned empty data');
+          throw new Error('failed to parse: model returned empty data');
         }
       } catch (pdfUploadError) {
         try {
@@ -673,7 +743,7 @@ async function handleGeminiExtraction(req, res) {
           const checkNormNative = normalizeFlatJson(checkRawNative);
           const validValuesNative = Object.values(checkNormNative.finalResponse).filter(v => v !== null && v !== '');
           if (validValuesNative.length === 0) {
-             throw new Error('failed to parse: native returned empty data');
+            throw new Error('failed to parse: native returned empty data');
           }
         } catch (nativeError) {
           const details = extractOpenRouterError(nativeError);
@@ -828,12 +898,12 @@ async function handleTicketsExtraction(req, res) {
         const checkRaw = extractAssistantText(data);
         const { tickets_details } = normalizeTicketsDetailsJson(checkRaw);
         const validValues = Object.keys(tickets_details)
-            .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
-            .map(k => tickets_details[k])
-            .filter(v => v !== null && v !== '');
-            
+          .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
+          .map(k => tickets_details[k])
+          .filter(v => v !== null && v !== '');
+
         if (validValues.length === 0) {
-           throw new Error('failed to parse: model returned empty data');
+          throw new Error('failed to parse: model returned empty data');
         }
       } catch (pdfUploadError) {
         try {
@@ -851,12 +921,12 @@ async function handleTicketsExtraction(req, res) {
           const checkRawNative = extractAssistantText(data);
           const { tickets_details } = normalizeTicketsDetailsJson(checkRawNative);
           const validValuesNative = Object.keys(tickets_details)
-              .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
-              .map(k => tickets_details[k])
-              .filter(v => v !== null && v !== '');
-              
+            .filter(k => k !== 'id' && k !== 'order_id' && k !== 'createdAt' && k !== 'updatedAt' && k !== 'ticketFile')
+            .map(k => tickets_details[k])
+            .filter(v => v !== null && v !== '');
+
           if (validValuesNative.length === 0) {
-             throw new Error('failed to parse: native returned empty data');
+            throw new Error('failed to parse: native returned empty data');
           }
         } catch (nativeError) {
           const details = extractOpenRouterError(nativeError);
@@ -957,6 +1027,76 @@ app.post(
   upload.single('image'),
   handleTicketsExtraction
 );
+
+/* =========================
+   CAR INSPECTION API
+========================= */
+async function handleCarInspection(req, res) {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي صور.' });
+    }
+
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
+
+    console.log(
+      `[INFO] car inspection: ${req.files.length} images received`
+    );
+
+    const prompt = buildCarInspectionPrompt();
+    
+    const contentArray = [{ type: 'text', text: prompt }];
+    
+    for (const file of req.files) {
+      const base64Data = file.buffer.toString('base64');
+      const imageDataUrl = `data:${file.mimetype};base64,${base64Data}`;
+      contentArray.push({
+        type: 'image_url',
+        image_url: {
+          url: imageDataUrl
+        }
+      });
+    }
+
+    const messages = [
+      {
+        role: 'user',
+        content: contentArray
+      }
+    ];
+
+    const data = await callOpenRouter({
+      model: modelName,
+      messages,
+      plugins: undefined,
+      useFallbackModels: true,
+      temperature: 0,
+      max_tokens: 1500
+    });
+
+    const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw car inspection response:', rawText);
+
+    const { inspection_details } = normalizeCarInspectionJson(rawText);
+
+    return res.status(200).json({ inspection_details });
+  } catch (error) {
+    const details = extractOpenRouterError(error);
+
+    console.error('[ERROR] inspect-car:', details.message);
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء فحص السيارة.',
+      providerError: details.message,
+      details: process.env.NODE_ENV === 'development' ? details.raw : undefined
+    });
+  }
+}
+
+app.post('/api/inspect-car', upload.array('images', 20), handleCarInspection);
 
 app.post('/prompt', async (req, res) => {
   try {
