@@ -249,10 +249,15 @@ const PROMPT_RULES_CAR_INSPECTION = `
 - JSON only, no markdown, no commentary.
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
-1. DASHBOARD WARNINGS: ONLY report warning lights that are actively illuminated (lit up in RED or YELLOW) such as Check Engine, ABS, Battery, or Oil. Do NOT report unlit icons printed on the dashboard. Do NOT guess. If no warning lights are actively lit, return null.
+1. DASHBOARD WARNINGS: 
+   - Normal Lights (IGNORE THESE): Parking brake (P), Seatbelt, Door open, Headlights. Do NOT report these as warnings.
+   - Dangerous Warnings (REPORT THESE): Check Engine, ABS, Battery, Oil pressure, Airbag (SRS), Engine Temperature, Transmission, Tire Pressure (TPMS). 
+   - ONLY report the Dangerous Warnings IF AND ONLY IF they are actively GLOWING/ILLUMINATED brightly (usually red or yellow). 
+   - Unlit/dark icons printed on the plastic MUST be ignored. 
+   - If no Dangerous Warnings are glowing, return null. DO NOT guess.
 2. EXTERIOR DAMAGES: Be extremely conservative. Do NOT mistake reflections, dirt, water spots, glare, or shadows for scratches or dents. ONLY report a damage if it is clearly and undeniably a scratch, dent, or crack. If in doubt, do not list it.
 3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
-4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields (meter, fuel, warnings).
+4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields.
 
 📝 ARABIC LANGUAGE REQUIREMENT:
 - ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity) MUST be written in Arabic language ONLY.
