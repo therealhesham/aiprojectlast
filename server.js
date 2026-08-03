@@ -445,10 +445,22 @@ function extractAssistantText(data) {
   throw new Error('Unsupported OpenRouter response format');
 }
 
+function extractJsonBlock(rawText) {
+  let text = String(rawText || '').trim();
+  const blockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (blockMatch && blockMatch[1]) {
+    return blockMatch[1].trim();
+  }
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return text.substring(firstBrace, lastBrace + 1);
+  }
+  return text;
+}
+
 function normalizeFlatJson(rawText) {
-  const cleanedText = String(rawText || '')
-    .replace(/```json\s*|\s*```/g, '')
-    .trim();
+  const cleanedText = extractJsonBlock(rawText);
 
   const parsed = JSON.parse(cleanedText);
 
@@ -475,9 +487,7 @@ function normalizeFlatJson(rawText) {
 }
 
 function normalizeTicketsDetailsJson(rawText) {
-  const cleanedText = String(rawText || '')
-    .replace(/```json\s*|\s*```/g, '')
-    .trim();
+  const cleanedText = extractJsonBlock(rawText);
 
   const parsed = JSON.parse(cleanedText);
 
@@ -509,9 +519,7 @@ function normalizeTicketsDetailsJson(rawText) {
 }
 
 function normalizeCarInspectionJson(rawText) {
-  const cleanedText = String(rawText || '')
-    .replace(/```json\s*|\s*```/g, '')
-    .trim();
+  const cleanedText = extractJsonBlock(rawText);
 
   const parsed = JSON.parse(cleanedText);
 
