@@ -237,6 +237,7 @@ const CAR_INSPECTION_KEYS = [
   'exterior_damages',
   'interior_status',
   'missing_items',
+  'invalid_images',
   'ai_summary',
   'is_clean'
 ];
@@ -251,24 +252,29 @@ const PROMPT_RULES_CAR_INSPECTION = `
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
 2. DASHBOARD WARNINGS: 
    - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights. Do NOT report these.
-   - Dangerous Warnings (REPORT THESE ONLY IF GLOWING): 
+   - Dangerous Warnings (REPORT THESE): 
       * Tire Pressure (TPMS): Orange/Yellow horseshoe shape with an exclamation mark (!).
       * Check Engine: Yellow/Orange engine block outline.
       * Battery: Red rectangle with plus (+) and minus (-) symbols.
       * Oil pressure: Red dripping oil can.
       * Airbag (SRS): Red person with a circle/balloon in front of them.
       * Engine Temperature: Red thermometer in liquid.
-   - Look EXTREMELY carefully at the shape of the glowing icon. DO NOT confuse the orange TPMS (!) horseshoe for a battery or engine.
-   - ONLY report the Dangerous Warnings if you can clearly identify their shape. If no Dangerous Warnings are glowing, return null. DO NOT guess.
+   - If you see ANY glowing orange, yellow, or red light that is NOT one of the "Normal Lights", you MUST report it. 
+   - Even if the image is slightly blurry, try your best to identify it. For example, an orange light glowing on the side of the dashboard is often the Tire Pressure (TPMS) or Check Engine light. Do NOT ignore it just because it's slightly blurry.
 3. EXTERIOR DAMAGES: Look extremely carefully at all parts of the car (bumpers, grilles, fenders, doors).
    - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
    - Pay special attention to the front lower grilles (الشبك السفلي) and bumper corners for broken or missing plastic slats.
    - Be conservative: Do NOT mistake reflections, dirt, water spots, glare, or shadows for damages. ONLY report a damage if it is clearly undeniable. If in doubt, do not list it.
 3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
 4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields.
+5. IMAGE VALIDATION (CRITICAL): Each image provided to you has a filename representing its category (e.g., 'roof.jpg' for التندة/السقف, 'meter.jpg' for الطبلون). 
+   - You MUST verify that the content of the image actually matches its filename.
+   - You MUST check for duplicate images (e.g. the exact same photo uploaded for both left and right doors).
+   - You MUST check if the image is completely black, too dark, or completely blurry making it useless.
+   - Any invalid, mismatched, duplicate, or unreadable images must be listed in the 'invalid_images' array with the exact filename and the reason in Arabic.
 
 📝 ARABIC LANGUAGE REQUIREMENT:
-- ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity, description) MUST be written in Arabic language ONLY.
+- ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity, description, reason) MUST be written in Arabic language ONLY.
 - meter_reading: string or number of the odometer reading (write numbers clearly, e.g. "124500").
 - fuel_level: string in Arabic (e.g. "ممتلئ", "النصف", "الربع", "فارغ").
 - dashboard_warnings: string describing actively lit warning lights in Arabic, or null.
@@ -280,6 +286,12 @@ const PROMPT_RULES_CAR_INSPECTION = `
       "description": "وجود كسر واضح وفقدان لقطعة بلاستيكية من الشبك السفلي في الجهة اليمنى للسيارة."
     }
   ], or null if none.
+- "invalid_images": [
+    {
+      "image_name": "roof.jpg",
+      "reason": "الصورة لا تظهر سقف السيارة، بل تظهر عجلة القيادة"
+    }
+  ], or null if all images are valid and correct.
 - interior_status: string describing the interior in Arabic.
 - missing_items: string describing missing items like fire extinguisher in Arabic.
 - ai_summary: a brief text summary of the overall car condition in Arabic.
