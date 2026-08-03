@@ -43,7 +43,7 @@ const DEFAULT_TEXT_MODEL =
   process.env.OPENROUTER_TEXT_MODEL || 'google/gemini-2.5-flash';
 
 const DEFAULT_VISION_MODEL =
-  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash-lite';
+  process.env.OPENROUTER_VISION_MODEL || 'google/gemini-2.5-flash';
 
 const PDF_ENGINE =
   process.env.OPENROUTER_PDF_ENGINE || 'cloudflare-ai';
