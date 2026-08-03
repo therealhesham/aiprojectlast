@@ -1106,6 +1106,12 @@ async function handleCarInspection(req, res) {
     for (const file of req.files) {
       const base64Data = file.buffer.toString('base64');
       const imageDataUrl = `data:${file.mimetype};base64,${base64Data}`;
+      
+      contentArray.push({
+        type: 'text',
+        text: `\n[Category: ${file.originalname}]\n`
+      });
+
       contentArray.push({
         type: 'image_url',
         image_url: {
