@@ -249,7 +249,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
 - Do NOT add extra keys. Do NOT rename keys.
 - If a value is missing or cannot be determined from the images, use null.
 - Your response MUST consist of two parts:
-  PART 1: A step-by-step image analysis (Checklist). For each image, you must explicitly answer: 1) Is there a crack/break? 2) Is there a dent? 3) Is there a scratch? 4) Is a part missing?
+  PART 1: A step-by-step image analysis (Checklist). ONLY write an analysis for images where you detect damage (crack, dent, scratch, or missing part). For those damaged images, explicitly answer: 1) Is there a crack/break? 2) Is there a dent? 3) Is there a scratch? 4) Is a part missing? If an image is perfectly clean, SKIP IT and do not write anything for it.
   PART 2: The final JSON object enclosed in a \`\`\`json block. Do not put markdown inside the JSON itself.
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
@@ -1138,7 +1138,7 @@ async function handleCarInspection(req, res) {
       plugins: undefined,
       useFallbackModels: true,
       temperature: 0,
-      max_tokens: 4000
+      max_tokens: 8192
     });
 
     const rawText = extractAssistantText(data);
