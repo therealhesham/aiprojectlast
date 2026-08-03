@@ -252,7 +252,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
 2. DASHBOARD WARNINGS: 
-   - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights. Do NOT report these.
+   - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights, Low Fuel (Yellow/Orange fuel pump icon). Do NOT report these.
    - Dangerous Warnings (REPORT THESE): 
       * Tire Pressure (TPMS): Orange/Yellow horseshoe shape with an exclamation mark (!).
       * Check Engine: Yellow/Orange engine block outline.
@@ -263,7 +263,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
    - If you see ANY glowing orange, yellow, or red light that is NOT one of the "Normal Lights", you MUST report it. 
    - Even if the image is slightly blurry, try your best to identify it. For example, an orange light glowing on the side of the dashboard is often the Tire Pressure (TPMS) or Check Engine light. Do NOT ignore it just because it's slightly blurry.
 3. EXTERIOR DAMAGES: Look extremely carefully at all parts of the car (bumpers, grilles, fenders, doors).
-   - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
+   - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة - explicitly check if the manufacturer logo is missing from the grille or trunk!), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
    - Pay special attention to the front lower grilles (الشبك السفلي) and bumper corners for broken or missing plastic slats.
    - Do NOT ignore minor damages. If you see ANY scratch (خدش), scrape (احتكاك), or dent (طعجة) on the bumpers or body panels, you MUST report it. Do not dismiss actual scratches as dirt or reflections. Look closely at the texture of the paint.
 3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
