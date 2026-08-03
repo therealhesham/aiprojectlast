@@ -260,11 +260,18 @@ const PROMPT_RULES_CAR_INSPECTION = `
 4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields.
 
 📝 ARABIC LANGUAGE REQUIREMENT:
-- ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity) MUST be written in Arabic language ONLY.
+- ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity, description) MUST be written in Arabic language ONLY.
 - meter_reading: string or number of the odometer reading (write numbers clearly, e.g. "124500").
 - fuel_level: string in Arabic (e.g. "ممتلئ", "النصف", "الربع", "فارغ").
 - dashboard_warnings: string describing actively lit warning lights in Arabic, or null.
-- exterior_damages: an array of objects like [{"part": "الصدام الأمامي", "type": "خدش", "severity": "خفيف"}], or null if none.
+- "exterior_damages": [
+    {
+      "part": "الصدام الأمامي",
+      "type": "خدش",
+      "severity": "خفيف/متوسط/شديد",
+      "description": "وصف دقيق للمشكلة التي تراها في الصورة (مثال: خدش طويل باللون الأسود في الزاوية اليمنى السفلية من الصدام)"
+    }
+  ], or null if none.
 - interior_status: string describing the interior in Arabic.
 - missing_items: string describing missing items like fire extinguisher in Arabic.
 - ai_summary: a brief text summary of the overall car condition in Arabic.
