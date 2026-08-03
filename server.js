@@ -266,6 +266,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
    - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة - explicitly check if the manufacturer logo is missing from the grille or trunk!), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
    - Pay special attention to the front lower grilles (الشبك السفلي) and bumper corners for broken or missing plastic slats.
    - Do NOT ignore minor damages. If you see ANY scratch (خدش), scrape (احتكاك), or dent (طعجة) on the bumpers or body panels, you MUST report it. Do not dismiss actual scratches as dirt or reflections. Look closely at the texture of the paint.
+   - EXTREMELY IMPORTANT: If you find one damage in an area (for example, a missing logo), DO NOT STOP LOOKING in that area! There might be scratches or cracks right next to it or below it. You must report ALL damages you see. You can report multiple issues for the same part, or combine them in the description.
 3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
 4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields.
 5. IMAGE VALIDATION (CRITICAL): Each image provided to you has a filename representing its category (e.g., 'roof.jpg' for التندة/السقف, 'meter.jpg' for الطبلون). 
