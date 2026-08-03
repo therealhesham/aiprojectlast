@@ -21,8 +21,9 @@ const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/png', 'image/jpeg', 'application/pdf'];
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'application/octet-stream', 'application/pdf'];
     if (!allowedTypes.includes(file.mimetype)) {
+      console.log(`[WARN] Rejected file with mimetype: ${file.mimetype}`);
       return cb(new Error('الرجاء تحميل ملف صورة (PNG أو JPEG) أو PDF فقط.'));
     }
     cb(null, true);
