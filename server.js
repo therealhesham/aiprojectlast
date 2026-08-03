@@ -272,7 +272,9 @@ const PROMPT_RULES_CAR_INSPECTION = `
    - You MUST verify that the content of the image actually matches its filename.
    - You MUST check for duplicate images (e.g. the exact same photo uploaded for both left and right doors).
    - You MUST check if the image is completely black, too dark, or completely blurry making it useless.
-   - Any invalid, mismatched, duplicate, or unreadable images must be listed in the 'invalid_images' array with the exact filename and the reason in Arabic.
+   - 🚫 FATAL ERROR: If an image is NOT of a car (e.g. an office, a keyboard, people, random objects), it is COMPLETELY INVALID. Do not pretend it's a car.
+   - Any invalid, mismatched, duplicate, unreadable, or non-car images MUST be listed in the 'invalid_images' array with the exact filename and the reason in Arabic.
+   - If most or all images are not of a car, YOU MUST set 'is_clean' to false and state clearly in 'ai_summary' that the images are invalid and do not contain a car.
 
 📝 ARABIC LANGUAGE REQUIREMENT:
 - ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity, description, reason) MUST be written in Arabic language ONLY.
@@ -306,6 +308,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
   "exterior_damages": null,
   "interior_status": null,
   "missing_items": null,
+  "invalid_images": null,
   "ai_summary": null,
   "is_clean": null
 }
