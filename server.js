@@ -248,7 +248,9 @@ const PROMPT_RULES_CAR_INSPECTION = `
 - Return ONLY a valid flat JSON object with EXACTLY the keys listed below.
 - Do NOT add extra keys. Do NOT rename keys.
 - If a value is missing or cannot be determined from the images, use null.
-- JSON only, no markdown, no commentary.
+- Your response MUST consist of two parts:
+  PART 1: A step-by-step image analysis (Checklist). For each image, you must explicitly answer: 1) Is there a crack/break? 2) Is there a dent? 3) Is there a scratch? 4) Is a part missing?
+  PART 2: The final JSON object enclosed in a \`\`\`json block. Do not put markdown inside the JSON itself.
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
 2. DASHBOARD WARNINGS: 
@@ -313,6 +315,8 @@ const PROMPT_RULES_CAR_INSPECTION = `
   "ai_summary": null,
   "is_clean": null
 }
+
+Remember: You MUST write your step-by-step checklist analysis FIRST for each image, and then output the JSON block at the very end.
 `;
 
 /* =========================
