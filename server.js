@@ -281,12 +281,13 @@ const PROMPT_RULES_CAR_INSPECTION = `
 
 📝 ARABIC LANGUAGE REQUIREMENT:
 - ALL text fields (ai_summary, dashboard_warnings, interior_status, missing_items, part, type, severity, description, reason) MUST be written in Arabic language ONLY.
+- 🔴 IMPORTANT FOR 'part' FIELD: You MUST use the exact words "يمين" (Right) and "يسار" (Left). Do NOT use feminine or complex forms like "اليسرى", "اليمنى", "الأيسر", "الأيمن". For example, write "الباب الأمامي يسار" NOT "الباب الأمامي الأيسر".
 - meter_reading: string or number of the odometer reading (write numbers clearly, e.g. "124500").
 - fuel_level: string in Arabic (e.g. "ممتلئ", "النصف", "الربع", "فارغ").
 - dashboard_warnings: string describing actively lit warning lights in Arabic, or null.
 - "exterior_damages": [
     {
-      "part": "الشبك الأمامي السفلي",
+      "part": "الشبك الأمامي السفلي يسار",
       "type": "كسر / قطعة مفقودة",
       "severity": "متوسط",
       "description": "وجود كسر واضح وفقدان لقطعة بلاستيكية من الشبك السفلي في الجهة اليمنى للسيارة."
