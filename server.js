@@ -826,7 +826,7 @@ async function handleGeminiExtraction(req, res) {
             ],
             useFallbackModels: true,
             temperature: 0,
-            max_tokens: 1200
+            max_tokens: 4000
           });
         }
       }
@@ -854,7 +854,7 @@ async function handleGeminiExtraction(req, res) {
         plugins: undefined,
         useFallbackModels: true,
         temperature: 0,
-        max_tokens: 1200
+        max_tokens: 4000
       });
     }
 
@@ -945,7 +945,7 @@ async function handleTicketsExtraction(req, res) {
           pdfDataUrl,
           plugins,
           temperature: 0,
-          max_tokens: 1500
+          max_tokens: 4000
         });
 
         const checkRaw = extractAssistantText(data);
@@ -968,7 +968,7 @@ async function handleTicketsExtraction(req, res) {
             pdfDataUrl,
             plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }],
             temperature: 0,
-            max_tokens: 1500
+            max_tokens: 4000
           });
 
           const checkRawNative = extractAssistantText(data);
@@ -1009,7 +1009,7 @@ async function handleTicketsExtraction(req, res) {
             ],
             useFallbackModels: true,
             temperature: 0,
-            max_tokens: 1500
+            max_tokens: 4000
           });
         }
       }
@@ -1035,7 +1035,7 @@ async function handleTicketsExtraction(req, res) {
         plugins: undefined,
         useFallbackModels: true,
         temperature: 0,
-        max_tokens: 1500
+        max_tokens: 4000
       });
     }
 
@@ -1127,7 +1127,7 @@ async function handleCarInspection(req, res) {
       plugins: undefined,
       useFallbackModels: true,
       temperature: 0,
-      max_tokens: 1500
+      max_tokens: 4000
     });
 
     const rawText = extractAssistantText(data);
