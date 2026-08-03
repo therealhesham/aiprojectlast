@@ -265,7 +265,7 @@ const PROMPT_RULES_CAR_INSPECTION = `
 3. EXTERIOR DAMAGES: Look extremely carefully at all parts of the car (bumpers, grilles, fenders, doors).
    - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
    - Pay special attention to the front lower grilles (الشبك السفلي) and bumper corners for broken or missing plastic slats.
-   - Be conservative: Do NOT mistake reflections, dirt, water spots, glare, or shadows for damages. ONLY report a damage if it is clearly undeniable. If in doubt, do not list it.
+   - Do NOT ignore minor damages. If you see ANY scratch (خدش), scrape (احتكاك), or dent (طعجة) on the bumpers or body panels, you MUST report it. Do not dismiss actual scratches as dirt or reflections. Look closely at the texture of the paint.
 3. MISSING ITEMS: Do not assume items are missing unless clearly absent from their designated visible spot.
 4. If an image (like the dashboard) is blurry or unreadable, return null for its related fields.
 5. IMAGE VALIDATION (CRITICAL): Each image provided to you has a filename representing its category (e.g., 'roof.jpg' for التندة/السقف, 'meter.jpg' for الطبلون). 
