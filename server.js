@@ -262,8 +262,11 @@ const PROMPT_RULES_CAR_INSPECTION = `
       * Oil pressure: Red dripping oil can.
       * Airbag (SRS): Red person with a circle/balloon in front of them.
       * Engine Temperature: Red thermometer in liquid.
-   - If you see ANY glowing orange, yellow, or red light that is NOT one of the "Normal Lights", you MUST report it. 
-   - Even if the image is slightly blurry, try your best to identify it. For example, an orange light glowing on the side of the dashboard is often the Tire Pressure (TPMS) or Check Engine light. Do NOT ignore it just because it's slightly blurry.
+   - If you see ANY glowing orange, yellow, or red light that is NOT one of the "Normal Lights", you MUST report it.
+   - ⚠️ CONFIDENCE LEVELS: 
+     - If you are 100% sure a warning light is on, report it clearly.
+     - If you are 50-60% sure (due to blurriness or glare), report it but use words indicating uncertainty (e.g., "يبدو أن هناك ضوء...", "من الممكن وجود تحذير...").
+     - If you are less than 50% sure, IGNORE IT completely.
 3. EXTERIOR DAMAGES: Look extremely carefully at all parts of the car (bumpers, grilles, fenders, doors).
    - Look for a WIDE VARIETY of issues: broken plastic (كسر), missing pieces (قطعة مفقودة - explicitly check if the manufacturer logo is missing from the grille or trunk!), holes (ثقب), deep dents (طعجة), cracks (شعر/كسر), misaligned parts (انفصال/بروز), and scratches (خدش).
    - Pay special attention to the front lower grilles (الشبك السفلي) and bumper corners for broken or missing plastic slats.
