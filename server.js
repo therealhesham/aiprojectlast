@@ -448,6 +448,7 @@ function extractAssistantText(data) {
       .trim();
   }
 
+  console.error('[ERROR] Unsupported OpenRouter message:', JSON.stringify(message, null, 2));
   throw new Error('Unsupported OpenRouter response format');
 }
 
