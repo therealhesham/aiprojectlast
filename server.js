@@ -335,11 +335,11 @@ const PROMPT_RULES_CAR_COMPARISON = `
 - Do NOT add extra keys. Do NOT rename keys.
 - If a value is missing or cannot be determined from the images, use null.
 - Your response MUST consist of two parts:
-  PART 1: A step-by-step image analysis (Checklist). ONLY write an analysis for image pairs where you detect NEW damage.
+  PART 1: A step-by-step image analysis (Checklist). You MUST explicitly write down your analysis for EVERY SINGLE PAIR of images provided (e.g. "Front Bumper: No new scratches", "Right Doors: Found a new dent"). Do not skip any provided parts.
   PART 2: The final JSON object enclosed in a \`\`\`json block. Do not put markdown inside the JSON itself.
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
-1. BATCH PROCESSING: You might only receive a subset of the car's images in this request. If an image for a specific part (like the meter, fuel, or interior) is NOT provided in THIS specific request, you MUST return null for its related field. Do NOT write "لا تتوفر صورة" or "Missing image". Just return null.
+1. BATCH PROCESSING: You will receive a subset of the car's images (e.g., 5-6 parts). You must compare the "Before" and "After" image for EACH part provided. If an image for a specific part (like the meter, fuel, or interior) is NOT provided in THIS specific request, you MUST return null for its related field. Do NOT write "لا تتوفر صورة". Just return null.
 2. DASHBOARD WARNINGS: Read from the "After" image (e.g. meter_after.jpg). 
    - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights, Low Fuel (Yellow/Orange fuel pump icon). Do NOT report these.
    - Dangerous Warnings (REPORT THESE): TPMS, Check Engine, Battery, Oil pressure, Airbag, Engine Temperature.
