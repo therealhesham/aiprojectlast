@@ -324,6 +324,67 @@ Remember: You MUST write your step-by-step checklist analysis FIRST for each ima
 `;
 
 /* =========================
+   Car Comparison (Check-in vs Check-out)
+========================= */
+const PROMPT_RULES_CAR_COMPARISON = `
+⚠️ STRICT RULES:
+- You are provided with PAIRS of images for various parts of a car. For each part, you will see a "[Before - خروج]" image and an "[After - دخول]" image.
+- Your task is to compare the "After" image to the "Before" image and identify ONLY NEW damages (scratches, dents, missing parts) that appear in the "After" image but were NOT present in the "Before" image.
+- Do NOT report any damage that is visible in BOTH images.
+- Return ONLY a valid flat JSON object with EXACTLY the keys listed below.
+- Do NOT add extra keys. Do NOT rename keys.
+- If a value is missing or cannot be determined from the images, use null.
+- Your response MUST consist of two parts:
+  PART 1: A step-by-step image analysis (Checklist). ONLY write an analysis for image pairs where you detect NEW damage.
+  PART 2: The final JSON object enclosed in a \`\`\`json block. Do not put markdown inside the JSON itself.
+
+🛑 CRITICAL ANTI-HALLUCINATION RULES:
+2. DASHBOARD WARNINGS: Read from the "After" image (meter.jpg). 
+   - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights, Low Fuel (Yellow/Orange fuel pump icon). Do NOT report these.
+   - Dangerous Warnings (REPORT THESE): TPMS, Check Engine, Battery, Oil pressure, Airbag, Engine Temperature.
+3. EXTERIOR DAMAGES: Look for NEW damages only. Compare "Before" and "After" carefully.
+   - Do NOT ignore minor damages. If you see ANY NEW scratch (خدش), scrape (احتكاك), or dent (طعجة), you MUST report it.
+4. If an image is blurry or unreadable, return null for its related fields.
+5. IMAGE VALIDATION: Verify the images match their filename.
+
+📝 ARABIC LANGUAGE REQUIREMENT:
+- ALL text fields MUST be written in Arabic language ONLY.
+- "exterior_damages": [
+    {
+      "part": "الشبك الأمامي السفلي يسار",
+      "type": "كسر جديد / خدش حديث",
+      "severity": "متوسط",
+      "description": "وجود خدش جديد في الجهة اليسرى لم يكن موجوداً في صورة الخروج."
+    }
+  ], or null if none.
+- "invalid_images": [
+    {
+      "image_name": "front_bumper_after.jpg",
+      "reason": "الصورة لا تظهر صدام السيارة"
+    }
+  ] or null.
+- interior_status: string describing the interior in Arabic.
+- missing_items: string describing missing items in Arabic.
+- ai_summary: string summarizing the comparison.
+- is_clean: boolean (false if any NEW damage is found or car is returned excessively dirty compared to before).
+
+🧾 REQUIRED KEYS (ALL MUST EXIST):
+{
+  "meter_reading": null,
+  "fuel_level": null,
+  "dashboard_warnings": null,
+  "exterior_damages": null,
+  "interior_status": null,
+  "missing_items": null,
+  "invalid_images": null,
+  "ai_summary": null,
+  "is_clean": null
+}
+
+Remember: You MUST write your step-by-step checklist analysis FIRST for each image, and then output the JSON block at the very end.
+`;
+
+/* =========================
    Model Normalization
 ========================= */
 const MODEL_MAP = {
@@ -416,6 +477,15 @@ You are an expert car inspector. Analyze these images of a car check-in/check-ou
 Extract the car condition and return ONLY a valid flat JSON object.
 
 ${PROMPT_RULES_CAR_INSPECTION}
+  `.trim();
+}
+
+function buildCarComparisonPrompt() {
+  return `
+You are an expert car inspector. Analyze these PAIRS of images (Before/After) of a car check-in process.
+Extract ONLY NEW damages that happened during the rental period.
+
+${PROMPT_RULES_CAR_COMPARISON}
   `.trim();
 }
 
@@ -1165,7 +1235,79 @@ async function handleCarInspection(req, res) {
   }
 }
 
+async function handleCarComparison(req, res) {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي صور.' });
+    }
+
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
+
+    console.log(
+      `[INFO] car comparison: ${req.files.length} images received`
+    );
+
+    const prompt = buildCarComparisonPrompt();
+    
+    const contentArray = [{ type: 'text', text: prompt }];
+    
+    for (const file of req.files) {
+      const base64Data = file.buffer.toString('base64');
+      const imageDataUrl = `data:${file.mimetype};base64,${base64Data}`;
+      
+      contentArray.push({
+        type: 'text',
+        text: `\n[Category: ${file.originalname}]\n`
+      });
+
+      contentArray.push({
+        type: 'image_url',
+        image_url: {
+          url: imageDataUrl
+        }
+      });
+    }
+
+    const messages = [
+      {
+        role: 'user',
+        content: contentArray
+      }
+    ];
+
+    const data = await callOpenRouter({
+      model: modelName,
+      messages,
+      plugins: undefined,
+      useFallbackModels: true,
+      temperature: 0,
+      max_tokens: 8192
+    });
+
+    const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw car comparison response:', rawText);
+
+    const { inspection_details } = normalizeCarInspectionJson(rawText);
+
+    return res.status(200).json({ inspection_details });
+  } catch (error) {
+    const details = extractOpenRouterError(error);
+
+    console.error('[ERROR] inspect-compare-car:', details.message);
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء مقارنة السيارة.',
+      providerError: details.message,
+      details: process.env.NODE_ENV === 'development' ? details.raw : undefined
+    });
+  }
+}
+
 app.post('/api/inspect-car', upload.array('images', 20), handleCarInspection);
+app.post('/api/inspect-compare-car', upload.array('images', 40), handleCarComparison);
 
 app.post('/prompt', async (req, res) => {
   try {
