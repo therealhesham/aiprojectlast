@@ -366,7 +366,7 @@ const PROMPT_RULES_CAR_COMPARISON = `
   ] or null.
 - interior_status: string describing the interior in Arabic.
 - missing_items: string describing missing items in Arabic.
-- ai_summary: string summarizing the comparison.
+- ai_summary: DO NOT WRITE A SUMMARY HERE. ALWAYS RETURN null.
 - is_clean: boolean (false if any NEW damage is found or car is returned excessively dirty compared to before).
 
 🧾 REQUIRED KEYS (ALL MUST EXIST):
@@ -1306,6 +1306,59 @@ async function handleCarComparison(req, res) {
     });
   }
 }
+
+// ---------------------------------------------------------
+// POST /api/generate-summary
+// Generates a final professional summary based on collected JSON data
+// ---------------------------------------------------------
+app.post('/api/generate-summary', async (req, res) => {
+    try {
+        const { inspection_data } = req.body;
+        
+        if (!inspection_data) {
+            return res.status(400).json({ error: "Missing inspection_data" });
+        }
+
+        console.log('\n======================================================');
+        console.log('[SUMMARY REQUEST] Generating final AI summary...');
+        console.log('======================================================');
+
+        const prompt = `
+أنت مساعد ذكي متخصص في فحص السيارات.
+لقد تم تزويدك ببيانات الأضرار والملاحظات التي تم اكتشافها بعد فحص السيارة (فردياً لكل جزء) عند إرجاعها ومقارنتها بحالة الخروج.
+بيانات الفحص المجمعة:
+${JSON.stringify(inspection_data, null, 2)}
+
+مهمتك:
+اكتب ملخصاً احترافياً واحداً (ai_summary) باللغة العربية يشرح حالة السيارة باختصار شديد ووضوح تام.
+- إذا لم يكن هناك أي أضرار جديدة في 'exterior_damages' وكانت السيارة نظيفة، اذكر صراحة أن السيارة أُعيدت بنفس الحالة وأنها سليمة ولا يوجد ملاحظات.
+- إذا كان هناك أضرار جديدة، اذكرها باختصار وبطريقة مهنية.
+- إذا توفرت بيانات عن العداد أو الوقود أو التنبيهات، أضفها في الجملة الأولى.
+- لا تقم بتوليد أي بيانات إضافية ولا تكتب بصيغة JSON.
+- أرجع فقط النص النهائي الجاهز للعرض للمستخدم بدون أي مقدمات.
+`;
+
+        const responseData = await callOpenRouter({
+            model: 'google/gemini-2.5-pro',
+            messages: [
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            temperature: 0,
+            max_tokens: 1500
+        });
+
+        const summaryText = extractAssistantText(responseData);
+        
+        console.log('[SUMMARY] Generated successfully.');
+        res.json({ success: true, ai_summary: summaryText.trim() });
+    } catch (error) {
+        console.error('[ERROR] /api/generate-summary:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 app.post('/api/inspect-car', upload.array('images', 20), handleCarInspection);
 app.post('/api/inspect-compare-car', upload.array('images', 40), handleCarComparison);
