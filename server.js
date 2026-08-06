@@ -339,13 +339,14 @@ const PROMPT_RULES_CAR_COMPARISON = `
   PART 2: The final JSON object enclosed in a \`\`\`json block. Do not put markdown inside the JSON itself.
 
 🛑 CRITICAL ANTI-HALLUCINATION RULES:
-2. DASHBOARD WARNINGS: Read from the "After" image (meter.jpg). 
+1. BATCH PROCESSING: You might only receive a subset of the car's images in this request. If an image for a specific part (like the meter, fuel, or interior) is NOT provided in THIS specific request, you MUST return null for its related field. Do NOT write "لا تتوفر صورة" or "Missing image". Just return null.
+2. DASHBOARD WARNINGS: Read from the "After" image (e.g. meter_after.jpg). 
    - Normal Lights (IGNORE THESE): Parking brake (red P or exclamation in circle), Seatbelt (red person with belt), Door open (red car with open doors), Headlights, Low Fuel (Yellow/Orange fuel pump icon). Do NOT report these.
    - Dangerous Warnings (REPORT THESE): TPMS, Check Engine, Battery, Oil pressure, Airbag, Engine Temperature.
 3. EXTERIOR DAMAGES: Look for NEW damages only. Compare "Before" and "After" carefully.
-   - Do NOT ignore minor damages. If you see ANY NEW scratch (خدش), scrape (احتكاك), or dent (طعجة), you MUST report it.
+   - Do NOT ignore minor damages. If you see ANY NEW scratch (خدش), scrape (احتكاك), or dent (طعجة), you MUST report it. Look very closely at the provided images.
 4. If an image is blurry or unreadable, return null for its related fields.
-5. IMAGE VALIDATION: Verify the images match their filename.
+5. IMAGE VALIDATION: Verify the images match their filename. Note that filenames will end with _before.jpg and _after.jpg.
 
 📝 ARABIC LANGUAGE REQUIREMENT:
 - ALL text fields MUST be written in Arabic language ONLY.
