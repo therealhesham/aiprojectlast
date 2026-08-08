@@ -1363,6 +1363,94 @@ ${JSON.stringify(inspection_data, null, 2)}
 app.post('/api/inspect-car', upload.array('images', 20), handleCarInspection);
 app.post('/api/inspect-compare-car', upload.array('images', 40), handleCarComparison);
 
+// ---------------------------------------------------------
+// POST /api/inspect-single-part
+// ---------------------------------------------------------
+async function handleSinglePartComparison(req, res) {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'لم يتم تحميل أي صور.' });
+    }
+
+    const partName = req.body.partName || 'الجزء غير محدد';
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
+
+    console.log(`[INFO] inspect-single-part: ${partName} - ${req.files.length} images`);
+
+    const prompt = `
+أنت خبير فحص سيارات.
+أمامك صورتان لجزء واحد من السيارة: "${partName}".
+الصورة الأولى (قبل التأجير) والصورة الثانية (بعد الاسترجاع).
+
+مهمتك:
+قارن بدقة شديدة بين الصورتين واستخرج **فقط الأضرار الجديدة** التي ظهرت في صورة (بعد الاسترجاع) ولم تكن موجودة في صورة (قبل التأجير).
+إذا كان الجزء هو "العداد" (meter)، استخرج قراءة العداد ومستوى الوقود وأي لمبات تحذيرية حمراء/برتقالية خطيرة.
+
+أرجع النتيجة بصيغة JSON حصراً، بالهيكل التالي (بدون أي نصوص إضافية أو Markdown):
+{
+  "meter_reading": "12345" | null,
+  "fuel_level": "Quarter" | null,
+  "dashboard_warnings": "TPMS" | null,
+  "exterior_damages": [{ "part": "${partName}", "type": "خدش", "severity": "خفيف", "description": "خدش جديد في الزاوية" }] | null,
+  "interior_status": "بقع على المقعد" | null,
+  "missing_items": "طفاية حريق" | null,
+  "invalid_images": [{ "image_name": "...", "reason": "صورة غير واضحة" }] | null,
+  "is_clean": true | false
+}
+إذا لم تجد أي ضرر جديد، أرجع exterior_damages: null.
+`.trim();
+    
+    const contentArray = [{ type: 'text', text: prompt }];
+    
+    for (const file of req.files) {
+      const base64Data = file.buffer.toString('base64');
+      const imageDataUrl = `data:${file.mimetype};base64,${base64Data}`;
+      
+      contentArray.push({
+        type: 'text',
+        text: `\n[Category: ${file.originalname}]\n`
+      });
+
+      contentArray.push({
+        type: 'image_url',
+        image_url: { url: imageDataUrl }
+      });
+    }
+
+    const messages = [{ role: 'user', content: contentArray }];
+
+    const data = await callOpenRouter({
+      model: modelName,
+      messages,
+      plugins: undefined,
+      useFallbackModels: true,
+      temperature: 0,
+      max_tokens: 1500
+    });
+
+    const rawText = extractAssistantText(data);
+    let finalJson = {};
+    try {
+        const cleanedText = extractJsonBlock(rawText);
+        finalJson = JSON.parse(cleanedText);
+    } catch(e) {
+        console.error('[ERROR] Failed to parse JSON from part response:', rawText);
+        return res.status(500).json({ error: 'Invalid JSON response from AI', raw: rawText });
+    }
+
+    return res.status(200).json({ inspection_details: finalJson });
+  } catch (error) {
+    console.error('[ERROR] inspect-single-part:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+app.post('/api/inspect-single-part', upload.array('images', 2), handleSinglePartComparison);
+
+
 app.post('/prompt', async (req, res) => {
   try {
     const { text, model } = req.body;
