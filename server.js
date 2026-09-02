@@ -1519,6 +1519,190 @@ app.post('/process-document', upload.single('document'), async (req, res) => {
   }
 });
 
+
+// ============================================================================
+// CONTRACT EXTRACTION
+// ============================================================================
+
+const PROMPT_RULES_CONTRACT = `
+- You will be provided with a contract document (image or PDF).
+- Your ONLY task is to extract the TOTAL AMOUNT (المبلغ كامل / إجمالي العقد) mentioned in the contract.
+- Look for keywords like "المبلغ", "الإجمالي", "إجمالي العقد", "Total amount", etc.
+- Return the value as a number.
+- ONLY RETURN A VALID JSON object with the following structure, and nothing else:
+{
+  "amount": <number>
+}
+`;
+
+function buildContractDocumentPrompt() {
+  return `
+Extract the total contract amount from the image or PDF and return ONLY a valid flat JSON object.
+
+${PROMPT_RULES_CONTRACT}
+  `.trim();
+}
+
+function buildContractTextPrompt(text) {
+  return `
+Extract the total contract amount from the following text and return ONLY a valid flat JSON object.
+
+${PROMPT_RULES_CONTRACT}
+
+TEXT:
+${text}
+  `.trim();
+}
+
+async function handleContractExtraction(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'لم يتم استلام أي ملف.' });
+    }
+
+    const modelName = normalizeModelName(
+      req.body.model || DEFAULT_VISION_MODEL,
+      DEFAULT_VISION_MODEL
+    );
+
+    console.log(
+      `[INFO] contract_extraction: ${req.file.originalname}, ${(req.file.size / 1024 / 1024).toFixed(2)} MB`
+    );
+
+    const prompt = buildContractDocumentPrompt();
+    const base64Data = req.file.buffer.toString('base64');
+    let data;
+
+    if (req.file.mimetype === 'application/pdf') {
+      const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
+      const plugins = [
+        {
+          id: 'file-parser',
+          pdf: {
+            engine: PDF_ENGINE
+          }
+        }
+      ];
+
+      try {
+        data = await callOpenRouterForPdf({
+          primaryModel: modelName,
+          prompt,
+          filename: req.file.originalname || 'contract.pdf',
+          pdfDataUrl,
+          plugins,
+          temperature: 0,
+          max_tokens: 1500
+        });
+
+        const checkRaw = extractAssistantText(data);
+        const cleanedText = extractJsonBlock(checkRaw);
+        const parsed = JSON.parse(cleanedText);
+        
+        if (parsed.amount === undefined || parsed.amount === null) {
+          throw new Error('failed to parse: model returned empty data for amount');
+        }
+      } catch (pdfUploadError) {
+        try {
+          console.log('[INFO] المحاولة مع Native PDF parsing...');
+          data = await callOpenRouterForPdf({
+            primaryModel: modelName,
+            prompt,
+            filename: req.file.originalname || 'contract.pdf',
+            pdfDataUrl,
+            plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }],
+            temperature: 0,
+            max_tokens: 1500
+          });
+
+          const checkRawNative = extractAssistantText(data);
+          const cleanedText = extractJsonBlock(checkRawNative);
+          const parsedNative = JSON.parse(cleanedText);
+
+          if (parsedNative.amount === undefined || parsedNative.amount === null) {
+            throw new Error('failed to parse: native returned empty data for amount');
+          }
+        } catch (nativeError) {
+          const details = extractOpenRouterError(nativeError);
+          const message = String(details.message || '').toLowerCase();
+          const canFallbackToText =
+            message.includes('file data is missing') ||
+            message.includes('failed to parse') ||
+            message.includes('unexpected token');
+
+          if (!canFallbackToText) {
+            throw nativeError;
+          }
+
+          console.warn('[WARN] PDF contract: fallback to text extraction');
+
+          const extractedText = await extractPdfTextForFallback(req.file.buffer);
+          if (!extractedText) {
+            throw new Error('فشل استخراج النص من ملف الـ PDF.');
+          }
+
+          data = await callOpenRouter({
+            model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
+            messages: [
+              {
+                role: 'user',
+                content: buildContractTextPrompt(extractedText)
+              }
+            ],
+            useFallbackModels: true,
+            temperature: 0,
+            max_tokens: 1500
+          });
+        }
+      }
+    } else {
+      const imageDataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+      data = await callOpenRouter({
+        model: modelName,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageDataUrl
+                }
+              }
+            ]
+          }
+        ],
+        plugins: undefined,
+        useFallbackModels: true,
+        temperature: 0,
+        max_tokens: 1500
+      });
+    }
+
+    const rawText = extractAssistantText(data);
+    console.log('[DEBUG] Raw contract model response:', rawText);
+
+    const cleanedText = extractJsonBlock(rawText);
+    const parsedAmount = JSON.parse(cleanedText);
+
+    return res.status(200).json({ amount: parsedAmount.amount });
+  } catch (error) {
+    const details = extractOpenRouterError(error);
+
+    console.error('[ERROR] extractcontract:', details.message);
+
+    return res.status(details.status || 500).json({
+      error: 'حدث خطأ أثناء استخراج بيانات العقد.',
+      providerError: details.message
+    });
+  }
+}
+
+app.post('/api/extractcontract', upload.single('image'), handleContractExtraction);
+
+// ============================================================================
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
