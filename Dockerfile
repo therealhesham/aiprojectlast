@@ -7,6 +7,15 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
+# Install necessary system dependencies for image/pdf processing
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    ghostscript \
+    graphicsmagick \
+    imagemagick
+
 # Install dependencies
 RUN npm install --production
 
