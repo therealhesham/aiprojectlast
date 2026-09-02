@@ -1526,12 +1526,14 @@ app.post('/process-document', upload.single('document'), async (req, res) => {
 
 const PROMPT_RULES_CONTRACT = `
 - You will be provided with a contract document (image or PDF).
-- Your ONLY task is to extract the TOTAL AMOUNT (المبلغ كامل / إجمالي العقد) mentioned in the contract.
-- Look for keywords like "المبلغ", "الإجمالي", "إجمالي العقد", "Total amount", etc.
-- Return the value as a number.
+- Your task is to extract two values:
+  1. The total amount WITHOUT tax (المبلغ كاملا بدون ضريبة / الإجمالي غير شامل الضريبة).
+  2. The Value Added Tax (VAT) amount (قيمة الضريبة المضافة).
+- Return both values as numbers.
 - ONLY RETURN A VALID JSON object with the following structure, and nothing else:
 {
-  "amount": <number>
+  "amount_without_tax": <number>,
+  "tax_amount": <number>
 }
 `;
 
@@ -1599,8 +1601,8 @@ async function handleContractExtraction(req, res) {
         const cleanedText = extractJsonBlock(checkRaw);
         const parsed = JSON.parse(cleanedText);
         
-        if (parsed.amount === undefined || parsed.amount === null) {
-          throw new Error('failed to parse: model returned empty data for amount');
+        if (parsed.amount_without_tax === undefined || parsed.amount_without_tax === null || parsed.tax_amount === undefined || parsed.tax_amount === null) {
+          throw new Error('failed to parse: model returned empty data for contract amounts');
         }
       } catch (pdfUploadError) {
         try {
@@ -1619,8 +1621,8 @@ async function handleContractExtraction(req, res) {
           const cleanedText = extractJsonBlock(checkRawNative);
           const parsedNative = JSON.parse(cleanedText);
 
-          if (parsedNative.amount === undefined || parsedNative.amount === null) {
-            throw new Error('failed to parse: native returned empty data for amount');
+          if (parsedNative.amount_without_tax === undefined || parsedNative.amount_without_tax === null || parsedNative.tax_amount === undefined || parsedNative.tax_amount === null) {
+            throw new Error('failed to parse: native returned empty data for contract amounts');
           }
         } catch (nativeError) {
           const details = extractOpenRouterError(nativeError);
@@ -1687,7 +1689,10 @@ async function handleContractExtraction(req, res) {
     const cleanedText = extractJsonBlock(rawText);
     const parsedAmount = JSON.parse(cleanedText);
 
-    return res.status(200).json({ amount: parsedAmount.amount });
+    return res.status(200).json({ 
+      amount_without_tax: parsedAmount.amount_without_tax,
+      tax_amount: parsedAmount.tax_amount 
+    });
   } catch (error) {
     const details = extractOpenRouterError(error);
 
