@@ -1525,17 +1525,37 @@ app.post('/process-document', upload.single('document'), async (req, res) => {
 // ============================================================================
 
 const PROMPT_RULES_CONTRACT = `
-- You will be provided with a contract document (image or PDF).
+- You will be provided with an invoice or contract document (image, PDF, or text).
 - Your task is to extract two values:
-  1. The total amount WITHOUT tax (المبلغ كاملا بدون ضريبة / الإجمالي غير شامل الضريبة).
+  1. The total amount WITHOUT tax (المبلغ كاملا بدون ضريبة / المجموع الفرعي / الإجمالي غير شامل الضريبة).
   2. The Value Added Tax (VAT) amount (قيمة الضريبة المضافة).
 - Return both values as numbers.
+
+🛑 SPECIAL RULES FOR ARABIC INVOICES / CONTRACTS:
+- Some PDF files (such as those exported from Firefox/Cairo or certain PDF printers) may have a distorted or reversed text layer:
+  * Arabic words might appear reversed or with duplicated letters (e.g. "ععووممججممللاا ييععررففللاا" means "المجموع الفرعي", "غغللببمم ةةببييررضضللاا" means "مبلغ الضريبة", "ةروتاف" means "فاتورة", "ددققععللاا" means "العقد", "بلط دقاعت" means "طلب تعاقد").
+  * Numbers in notes or headers may have duplicated digits (e.g. "1155%%" is 15%, "110055..5533" is 105.53, or table line prefixes like "11913" representing row 1 with amount 1913).
+- To extract the accurate amounts:
+  * Check the Subtotal / المجموع الفرعي row.
+  * Check the VAT / مبلغ الضريبة row.
+  * You can also cross-calculate from the invoice service breakdown items (e.g., Direct recruitment 1913 + Foreign recruitment 1847 + Government fee 350 = 4110.00 subtotal, 15% VAT on 1913 = 286.95).
 - ONLY RETURN A VALID JSON object with the following structure, and nothing else:
 {
   "amount_without_tax": <number>,
   "tax_amount": <number>
 }
 `;
+
+function preprocessInvoiceText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return '';
+  const text = rawText.trim();
+  const hasDuplicatedLetters = /([\u0600-\u06FF])\1/.test(text);
+  if (hasDuplicatedLetters) {
+    const cleanedArabic = text.replace(/([\u0600-\u06FF])\1+/g, '$1');
+    return `--- RAW EXTRACTED TEXT ---\n${text}\n\n--- CLEANED ARABIC TEXT ---\n${cleanedArabic}`;
+  }
+  return text;
+}
 
 function buildContractDocumentPrompt() {
   return `
@@ -1643,12 +1663,14 @@ async function handleContractExtraction(req, res) {
             throw new Error('فشل استخراج النص من ملف الـ PDF.');
           }
 
+          const processedInvoiceText = preprocessInvoiceText(extractedText);
+
           data = await callOpenRouter({
             model: normalizeModelName(DEFAULT_TEXT_MODEL, DEFAULT_TEXT_MODEL),
             messages: [
               {
                 role: 'user',
-                content: buildContractTextPrompt(extractedText)
+                content: buildContractTextPrompt(processedInvoiceText)
               }
             ],
             useFallbackModels: true,
