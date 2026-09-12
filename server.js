@@ -208,6 +208,7 @@ const PROMPT_RULES_TICKETS = `
 - departure_time and arrival_time: string as on ticket (e.g. "14:30" or "2:30 PM"), else null.
 - reference_id: PNR / booking reference / ticket number if visible.
 - departure_airport and arrival_airport: IATA codes (3 letters) when possible, else full name.
+- SPECIAL RULE FOR AIRPORT CODES: "Madinah" / "Mohammad Bin Abdulaziz" airport is MED (Madinah, Saudi Arabia). Do NOT confuse it with AMM (Amman).
 - CRITICAL FOR TRANSIT/LAYOVERS: If the itinerary has multiple flights, extract the full journey. 
   - departure_airport MUST be the starting airport of the VERY FIRST flight.
   - arrival_airport MUST be the final destination of the VERY LAST flight (ignore any transit/layover airports).
